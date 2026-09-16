@@ -1,0 +1,11 @@
+# Registers the .env loader at the bottom of this file.
+#
+# EnvironmentPostProcessor implementations are read from THIS key in
+# spring.factories. They are NOT read from
+# META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports —
+# that file name belongs to a different mechanism, the one AutoConfiguration and
+# friends use. A .imports file here is ignored silently: no error, no warning,
+# and the .env files simply never load, which is exactly what happened before
+# this file existed.
+org.springframework.boot.env.EnvironmentPostProcessor=\
+com.htt.template.config.EnvFiles

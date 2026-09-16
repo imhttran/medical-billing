@@ -1,0 +1,537 @@
+#!/usr/bin/env bash
+# Single entry point for the template: start/stop/status, tests, setup,
+# role management, database reset.
+# Backend: Spring Boot + PostgreSQL (backend/). Frontend: Next.js (frontend/).
+
+set -u
+
+# ---- configuration ----
+
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+GREEN='\033[32m'; YELLOW='\033[33m'; RED='\033[31m'; NC='\033[0m'
+
+PORT_BACKEND=8080
+PORT_FRONTEND=3000
+
+# Spring backend lives here; used for the service dir, pid file and log name.
+BACKEND_DIR=backend
+
+# Seconds to wait for each service's port. Gradle may need to compile before
+# the backend's port opens (cold build/), so it gets a generous window;
+# npm run dev is quick.
+BACKEND_START_TRIES=120
+FRONTEND_START_TRIES=20
+
+# Service logs land at $LOG_BASE-<dir>.log.
+LOG_BASE=/tmp/spring-template
+
+# ---- database ----
+
+# The value of NAME in a .env-style file, unquoted, or empty when the file or
+# the line is missing. One implementation of the KEY=value parsing so the two
+# lookups below can't drift.
+env_file_value() {
+  local file="$ROOT_DIR/$1" name="$2"
+  [ -f "$file" ] || return 0
+  grep -E "^${name}=" "$file" | tail -1 | cut -d= -f2- | tr -d '"' || true
+}
+
+# Personal root .env wins, .env.dev fills in for development — the same
+# precedence the backend's env loader applies, per variable. Used by the
+# Postgres check, database reset, and re-seed commands.
+load_db_url() {
+  local url
+  url=$(env_file_value .env DATABASE_URL)
+  if [ -z "$url" ]; then url=$(env_file_value .env.dev DATABASE_URL); fi
+  if [ -z "$url" ]; then url="postgres://postgres:postgres@localhost:5432/template-db?sslmode=disable"; fi
+  echo "$url"
+}
+
+# TEST_DATABASE_URL for the integration tests: the real environment variable
+# first, then .env, then .env.dev. Empty when none of them define it, which is
+# what leaves the 12 DB-backed tests skipped.
+load_test_db_url() {
+  local url
+  url=$(env_file_value .env TEST_DATABASE_URL)
+  if [ -z "$url" ]; then url=$(env_file_value .env.dev TEST_DATABASE_URL); fi
+  echo "$url"
+}
+
+# ---- service control ----
+
+wait_for_port() {
+  local port="$1" name="$2" tries="$3" i=0
+  until lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; do
+    i=$((i + 1))
+    if [ "$i" -ge "$tries" ]; then
+      echo -e "${RED}$name did not come up on :$port${NC}"
+      return 1
+    fi
+    sleep 1
+  done
+}
+
+# start_service <Name> <dir> <port> <tries> <cmd...> — checks the port is
+# free, backgrounds <cmd> in <dir>, waits for the port, writes the PID to
+# <dir>/<dir>.pid.
+start_service() {
+  local name="$1" dir="$2" port="$3" tries="$4"; shift 4
+  if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo -e "${YELLOW}$name already running on :$port${NC}"
+    return 0
+  fi
+  echo "Starting $name on :$port ..."
+  (cd "$ROOT_DIR/$dir" && "$@" > "$LOG_BASE-$dir.log" 2>&1 &)
+  wait_for_port "$port" "$name" "$tries" || return 1
+  # PID of the actual listening process (the bootRun JVM / next dev).
+  local pid
+  pid=$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN | head -1)
+  if [ -n "$pid" ]; then echo "$pid" > "$ROOT_DIR/$dir/$dir.pid"; fi
+}
+
+start_backend() {
+  local url
+  url=$(load_db_url)
+  # Refuses to pointlessly launch if PostgreSQL is down (the backend exits
+  # immediately anyway).
+  if command -v pg_isready >/dev/null 2>&1 && ! pg_isready -q -d "$url"; then
+    echo -e "${RED}PostgreSQL is not running (checked $url).${NC}"
+    echo "Start it first, e.g. brew services start postgresql@16"
+    return 1
+  fi
+  if ! start_service "Backend" "$BACKEND_DIR" "$PORT_BACKEND" "$BACKEND_START_TRIES" ./gradlew bootRun; then
+    echo "→ see $LOG_BASE-$BACKEND_DIR.log"
+    return 1
+  fi
+}
+
+stop_service() {
+  local dir="$1" name="$2" port="$3"
+  # Separate statement: in one `local` line every RHS is expanded before any
+  # assignment happens, so $dir above would still be unbound here (set -u).
+  local pid_file="$ROOT_DIR/$dir/$dir.pid"
+  local pid=""
+  local recorded=1
+  if [ -f "$pid_file" ]; then
+    pid=$(cat "$pid_file")
+    rm -f "$pid_file"
+  fi
+  # Nothing recorded, so fall back to whatever holds the port (started manually,
+  # or a stale pid file). That process may not be ours at all — another project's
+  # dev server can grab 8080 — so confirm before killing it.
+  if [ -z "$pid" ]; then
+    pid=$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -1)
+    recorded=0
+  fi
+  if [ -z "$pid" ]; then
+    echo -e "${YELLOW}$name is not running${NC}"
+    return 0
+  fi
+  if [ "$recorded" -eq 0 ]; then
+    echo -e "${YELLOW}$name has no pid file; :$port is held by pid $pid.${NC}"
+    read -r -p "Kill pid $pid? It may belong to another project. [y/N] " answer
+    case "$answer" in
+      y|Y) ;;
+      *) echo "Left pid $pid alone."; return 0 ;;
+    esac
+  fi
+  if kill "$pid" 2>/dev/null; then
+    echo "Stopped $name (pid $pid)"
+  else
+    echo -e "${YELLOW}$name is not running${NC}"
+  fi
+}
+
+start_all() {
+  start_backend || return 1
+  start_frontend || { echo -e "${RED}Frontend did not start${NC}"; return 1; }
+  echo -e "${GREEN}Backend: http://localhost:$PORT_BACKEND  Frontend: http://localhost:$PORT_FRONTEND${NC}"
+  echo "Logs: $LOG_BASE-$BACKEND_DIR.log, $LOG_BASE-frontend.log"
+}
+
+# The frontend can't come up without its dependencies: say so up front instead
+# of letting `npm run dev` die into the log file and the port wait time out.
+require_frontend_deps() {
+  if [ ! -d "$ROOT_DIR/frontend/node_modules" ]; then
+    echo -e "${YELLOW}frontend/node_modules is missing — run ./manage.sh setup first${NC}"
+    return 1
+  fi
+}
+
+start_frontend() {
+  require_frontend_deps || return 1
+  start_service "Frontend" frontend "$PORT_FRONTEND" "$FRONTEND_START_TRIES" npm run dev
+}
+
+stop_all() {
+  stop_service "$BACKEND_DIR" Backend "$PORT_BACKEND"
+  stop_service frontend Frontend "$PORT_FRONTEND"
+}
+
+show_status() {
+  if lsof -nP -iTCP:"$PORT_BACKEND" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo -e "  Backend : ${GREEN}running${NC} on :$PORT_BACKEND"
+  else
+    echo -e "  Backend : ${RED}not running${NC}"
+  fi
+  if lsof -nP -iTCP:"$PORT_FRONTEND" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo -e "  Frontend: ${GREEN}running${NC} on :$PORT_FRONTEND"
+  else
+    echo -e "  Frontend: ${RED}not running${NC}"
+  fi
+}
+
+# ---- workflows ----
+
+first_time_setup() {
+  echo "→ frontend: npm install"
+  (cd "$ROOT_DIR/frontend" && npm install) || return 1
+  echo "→ backend: ./gradlew build (compiles + tests, may take a few minutes)"
+  (cd "$ROOT_DIR/$BACKEND_DIR" && ./gradlew build) || return 1
+  echo "→ database: migrations apply automatically on backend start."
+  echo "  Requires a running PostgreSQL (see DATABASE_URL in .env.example)."
+  echo -e "${GREEN}Setup complete. Start everything with ./manage.sh up.${NC}"
+}
+
+# Backend tests (./gradlew test) + frontend build. The DB-backed integration
+# tests need TEST_DATABASE_URL, taken from the environment or from .env / .env.dev;
+# without it they skip and the unit tests still run.
+run_tests() {
+  local url="${TEST_DATABASE_URL:-}"
+  if [ -z "$url" ]; then url=$(load_test_db_url); fi
+  if [ -n "$url" ]; then
+    echo "→ integration tests against $url"
+    (cd "$ROOT_DIR/$BACKEND_DIR" && TEST_DATABASE_URL="$url" ./gradlew test) || return 1
+  else
+    echo -e "${YELLOW}TEST_DATABASE_URL not set — unit-only tests (integration tests skip).${NC}"
+    (cd "$ROOT_DIR/$BACKEND_DIR" && ./gradlew test) || return 1
+  fi
+}
+
+# What `./manage.sh test` runs: the backend suite, then the frontend build
+# (which typechecks it as a side effect).
+run_checks() {
+  run_tests || return 1
+  require_frontend_deps || return 1
+  (cd "$ROOT_DIR/frontend" && npm run build)
+}
+
+# The artifact build: the boot jar the Dockerfile copies, plus the frontend's
+# production bundle.
+build_all() {
+  (cd "$ROOT_DIR/$BACKEND_DIR" && ./gradlew build) || return 1
+  require_frontend_deps || return 1
+  (cd "$ROOT_DIR/frontend" && npm run build)
+}
+
+# The repo's formatter. Kotlin formatting isn't wired up yet (no formatter plugin
+# in the Gradle build), so this covers the JS/TS/CSS/JSON/Markdown side. Prettier
+# lives in the frontend package, the only JS/TS in the repo, and runs from there
+# over the whole tree.
+format_code() {
+  require_frontend_deps || return 1
+  (cd "$ROOT_DIR/frontend" && npm run format)
+}
+
+# Build the jar, then run the CLI: it reads DATABASE_URL directly and ignores
+# .env files, matching the subcommand it replaces.
+set_user_role_for() {
+  local email="$1" role="$2"
+  (cd "$ROOT_DIR/$BACKEND_DIR" && ./gradlew bootJar -q && java -jar build/libs/app.jar set-role "$email" "$role") || return 1
+}
+
+# Destructive steps ask for a typed 'yes'; --yes skips the prompt so a script
+# (or `make db-reset YES=1`) can run them unattended. Declining is a failure, so
+# callers can tell "aborted" from "done".
+confirm_destructive() {
+  local url="$1" assume_yes="$2"
+  echo -e "${RED}This drops ALL tables in: ${url}${NC}"
+  if [ "$assume_yes" = "--yes" ]; then return 0; fi
+  read -r -p "Type 'yes' to confirm: " confirm
+  if [ "$confirm" != "yes" ]; then echo "Aborted."; return 1; fi
+}
+
+reset_database() {
+  local url
+  url=$(load_db_url)
+  confirm_destructive "$url" "${1:-}" || return 1
+  psql "$url" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' || return 1
+  echo -e "${GREEN}Database reset. Tables re-apply on next backend start.${NC}"
+}
+
+# Drop the schema, then restart the backend so it re-migrates and re-seeds
+# (dev admin). One-shot "start fresh".
+re_seed() {
+  local url
+  url=$(load_db_url)
+  confirm_destructive "$url" "${1:-}" || return 1
+  psql "$url" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' || return 1
+  stop_service "$BACKEND_DIR" Backend "$PORT_BACKEND"
+  start_backend || return 1
+  echo -e "${GREEN}Database re-seeded.${NC}"
+}
+
+# Tail a service log. Ctrl-C to stop following. No argument follows both.
+view_logs() {
+  local which="${1:-both}"
+  case "$which" in
+    backend) tail -f "$LOG_BASE-$BACKEND_DIR.log" ;;
+    frontend) tail -f "$LOG_BASE-frontend.log" ;;
+    both) tail -f "$LOG_BASE-$BACKEND_DIR.log" "$LOG_BASE-frontend.log" ;;
+    *) echo -e "${YELLOW}Unknown log: $which (use backend|frontend|both)${NC}"; return 1 ;;
+  esac
+}
+
+# ---- compose (the primary path) ----
+
+require_docker() {
+  if ! docker info >/dev/null 2>&1; then
+    echo -e "${RED}Docker isn't running.${NC}"
+    echo "Start Docker Desktop / Rancher Desktop, or take the native path: ./manage.sh up"
+    return 1
+  fi
+}
+
+# Detached, so it doesn't hijack the shell. `compose:build` is what rebuilds the
+# images after a code change.
+compose_up() {
+  require_docker || return 1
+  (cd "$ROOT_DIR" && docker compose up -d) || return 1
+  echo -e "${GREEN}API: http://localhost:$PORT_BACKEND  Frontend: http://localhost:$PORT_FRONTEND  Mailpit: http://localhost:8025${NC}"
+  echo "Logs: ./manage.sh compose:logs"
+}
+
+compose_down() {
+  require_docker || return 1
+  (cd "$ROOT_DIR" && docker compose down) || return 1
+  echo "Compose stack stopped (the database volume is kept)."
+}
+
+compose_build() {
+  require_docker || return 1
+  (cd "$ROOT_DIR" && docker compose build)
+}
+
+# The whole stack, or one service: ./manage.sh compose:logs api
+compose_logs() {
+  require_docker || return 1
+  if [ -n "${1:-}" ]; then
+    (cd "$ROOT_DIR" && docker compose logs -f "$1")
+  else
+    (cd "$ROOT_DIR" && docker compose logs -f)
+  fi
+}
+
+# ---- kubernetes (Rancher Desktop's cluster) ----
+
+K8S_NS=spring-template
+# The images compose builds. Rancher Desktop's k3s uses Docker's own daemon as
+# its container runtime (the node reports `docker://`), so its image store *is*
+# this one — no push, no load and no registry are involved. The manifests still
+# set imagePullPolicy: Never, because the images exist only locally.
+K8S_IMAGES="spring-template-api spring-template-frontend"
+
+require_k8s() {
+  if ! kubectl cluster-info >/dev/null 2>&1; then
+    echo -e "${RED}Kubernetes isn't reachable.${NC}"
+    echo "Enable it in Rancher Desktop: Preferences > Kubernetes > Enable Kubernetes."
+    return 1
+  fi
+}
+
+k8s_images_built() {
+  local img
+  for img in $K8S_IMAGES; do
+    docker image inspect "$img:latest" >/dev/null 2>&1 || return 1
+  done
+}
+
+# Rebuild from the Dockerfiles. `k8s:up` calls this too, but only when the
+# images don't exist at all.
+k8s_build() {
+  require_docker || return 1
+  (cd "$ROOT_DIR" && docker compose build)
+}
+
+# Rebuild after a code change. Both images keep the `latest` tag and the pods
+# never pull, so a rebuilt image is invisible to a pod that is already running:
+# the rollout restart is what actually moves them onto it.
+k8s_rebuild() {
+  require_k8s || return 1
+  k8s_build || return 1
+  kubectl -n "$K8S_NS" rollout restart deployment/api deployment/frontend || return 1
+  k8s_wait
+}
+
+k8s_wait() {
+  kubectl -n "$K8S_NS" rollout status statefulset/postgres --timeout=240s || return 1
+  kubectl -n "$K8S_NS" rollout status deployment/api --timeout=240s || return 1
+  kubectl -n "$K8S_NS" rollout status deployment/frontend --timeout=240s || return 1
+  kubectl -n "$K8S_NS" rollout status deployment/mailpit --timeout=120s
+}
+
+k8s_apply() {
+  # The namespace has to exist before anything can be created in it; kubectl
+  # applies a directory in filename order, so the 00- file wins the race.
+  (cd "$ROOT_DIR" && kubectl apply -f k8s/) || return 1
+}
+
+k8s_up() {
+  require_k8s || return 1
+  require_docker || return 1
+  if ! k8s_images_built; then
+    echo "→ the images aren't built yet"
+    k8s_build || return 1
+  fi
+  k8s_apply || return 1
+  k8s_wait || return 1
+  echo -e "${GREEN}UI: http://template.localhost    API: http://api.template.localhost${NC}"
+  echo "Mailpit and psql need a tunnel: ./manage.sh k8s:port-forward mailpit 8025 | ./manage.sh k8s:psql"
+}
+
+k8s_down() {
+  require_k8s || return 1
+  # Workloads and routing only. The namespace and Postgres's volume are kept, so
+  # the data is still there on the next `k8s:up`. `k8s:reset` is the one that
+  # discards it.
+  kubectl -n "$K8S_NS" delete deployment api frontend mailpit --ignore-not-found
+  kubectl -n "$K8S_NS" delete statefulset postgres --ignore-not-found
+  kubectl -n "$K8S_NS" delete service api frontend mailpit postgres --ignore-not-found
+  kubectl -n "$K8S_NS" delete ingress template --ignore-not-found
+  echo "Kubernetes workloads stopped (namespace and Postgres volume kept)."
+}
+
+k8s_status() {
+  require_k8s || return 1
+  kubectl -n "$K8S_NS" get pods,service,ingress 2>/dev/null \
+    || echo "Nothing deployed yet — ./manage.sh k8s:up"
+}
+
+k8s_logs() {
+  require_k8s || return 1
+  kubectl -n "$K8S_NS" logs -f "deployment/${1:-api}"
+}
+
+# Anything without an Ingress of its own (Mailpit, the API on :8080) is reached
+# through a tunnel: ./manage.sh k8s:port-forward mailpit 8025
+k8s_port_forward() {
+  require_k8s || return 1
+  local svc="${1:-}" port="${2:-}"
+  if [ -z "$svc" ] || [ -z "$port" ]; then
+    echo -e "${YELLOW}Usage: ./manage.sh k8s:port-forward <service> <port>${NC}"
+    echo "  e.g. mailpit 8025 (web UI), api 8080 (the API directly)"
+    return 2
+  fi
+  echo "Forwarding localhost:$port → $svc:$port (Ctrl-C to stop)"
+  kubectl -n "$K8S_NS" port-forward "service/$svc" "$port:$port"
+}
+
+k8s_psql() {
+  require_k8s || return 1
+  kubectl -n "$K8S_NS" exec -it statefulset/postgres -- psql -U postgres -d template-db
+}
+
+# The destructive one: the namespace owns the Postgres volume, so deleting it
+# throws the data away too.
+k8s_reset() {
+  require_k8s || return 1
+  echo -e "${RED}This deletes the '$K8S_NS' namespace: every pod, the Postgres volume and all data.${NC}"
+  if [ "${1:-}" != "--yes" ]; then
+    read -r -p "Type 'yes' to confirm: " confirm
+    if [ "$confirm" != "yes" ]; then echo "Aborted."; return 1; fi
+  fi
+  kubectl delete namespace "$K8S_NS" --ignore-not-found --wait=true || return 1
+  echo -e "${GREEN}Namespace deleted. ./manage.sh k8s:up recreates it empty.${NC}"
+}
+
+# ---- subcommands ----
+
+usage() {
+  cat <<'USAGE'
+Spring Boot + Next.js template.
+
+  ./manage.sh                       this list
+
+Docker — the primary path (no local JDK, Node or Postgres needed)
+  compose:up                        start the stack detached
+  compose:down                      stop it (the database volume is kept)
+  compose:build                     rebuild the images after a code change
+  compose:logs [service]            follow the stack, or one service
+
+Kubernetes — Rancher Desktop's cluster (needs Kubernetes enabled, and Docker up)
+  k8s:up                            deploy and wait for the rollout
+  k8s:rebuild                       rebuild the images and restart the pods onto them
+  k8s:down                          stop the workloads (keeps the database volume)
+  k8s:status | k8s:logs [service]   what's running, and its logs
+  k8s:port-forward <svc> <port>     tunnel to Mailpit (mailpit 8025) or the API
+  k8s:psql                          psql inside the Postgres pod
+  k8s:reset [--yes]                 delete the namespace and ALL data
+
+Native — needs Java 21, Node 20+ and a running PostgreSQL
+  up | down | status                start, stop, what's running
+  backend | frontend                start just one of them
+  logs [backend|frontend|both]      follow a service log
+
+Work
+  setup                             first-time dependency install
+  test                              backend tests + frontend build
+  build                             API jar + frontend production bundle
+  fmt                               prettier --write
+  role <email> <role>               set a role (client|staff|admin)
+  db:reset [--yes]                  drop and recreate the schema
+  db:reseed [--yes]                 drop the schema, restart the backend
+
+TEST_DATABASE_URL enables the 12 DB-backed integration tests; see docs/DATABASE.md.
+USAGE
+}
+
+# Runs one step and exits with its status, so `./manage.sh test && ...` and the
+# Makefile both see failures.
+step() {
+  local action="$1"; shift
+  "$action" "$@"
+  exit $?
+}
+
+case "${1:-}" in
+  "")             usage ;;
+  help|-h|--help) usage ;;
+  up)             step start_all ;;
+  backend)        step start_backend ;;
+  frontend)       step start_frontend ;;
+  down)           step stop_all ;;
+  status)         step show_status ;;
+  logs)           step view_logs "${2:-}" ;;
+  setup)          step first_time_setup ;;
+  test)           step run_checks ;;
+  build)          step build_all ;;
+  fmt)            step format_code ;;
+  db:reset)       step reset_database "${2:-}" ;;
+  db:reseed)      step re_seed "${2:-}" ;;
+  compose:up)     step compose_up ;;
+  compose:down)   step compose_down ;;
+  compose:build)  step compose_build ;;
+  compose:logs)   step compose_logs "${2:-}" ;;
+  k8s:up)         step k8s_up ;;
+  k8s:down)       step k8s_down ;;
+  k8s:rebuild)    step k8s_rebuild ;;
+  k8s:status)     step k8s_status ;;
+  k8s:logs)       step k8s_logs "${2:-}" ;;
+  k8s:psql)       step k8s_psql ;;
+  k8s:reset)      step k8s_reset "${2:-}" ;;
+  k8s:port-forward)
+    step k8s_port_forward "${2:-}" "${3:-}"
+    ;;
+  role)
+    if [ -z "${2:-}" ] || [ -z "${3:-}" ]; then
+      echo -e "${YELLOW}Usage: ./manage.sh role <email> <client|staff|admin>${NC}"
+      exit 2
+    fi
+    step set_user_role_for "$2" "$3"
+    ;;
+  *)
+    echo -e "${YELLOW}Unknown subcommand: $1${NC}"
+    usage
+    exit 2
+    ;;
+esac
