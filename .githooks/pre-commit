@@ -3,7 +3,19 @@
 # Fast checks only — no e2e here.
 set -e
 
-echo "→ backend: build + tests (Gradle; DB integration tests skip without TEST_DATABASE_URL)"
+# The DB-backed integration tests need TEST_DATABASE_URL (docs/DATABASE.md). Take it from
+# the environment, then .env, then .env.dev — but only export it when the database actually
+# answers. A Postgres that isn't running has to skip those tests, not fail the commit.
+if [ -z "$TEST_DATABASE_URL" ]; then
+  TEST_DATABASE_URL=$(grep -hm1 '^TEST_DATABASE_URL=' .env .env.dev 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+fi
+if [ -n "$TEST_DATABASE_URL" ] && command -v psql >/dev/null 2>&1 &&
+  psql "$TEST_DATABASE_URL" -qc 'select 1' >/dev/null 2>&1; then
+  export TEST_DATABASE_URL
+  echo "→ backend: build + tests (DB integration tests on: $TEST_DATABASE_URL)"
+else
+  echo "→ backend: build + tests (no reachable test database — DB integration tests skip)"
+fi
 (cd backend && ./gradlew build --quiet)
 
 echo "→ frontend: typecheck"
