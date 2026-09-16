@@ -41,11 +41,22 @@ code was shaped that way mostly survive the translation.
   no room to switch to BCrypt. A pinned test hashes against a Go-era value.
 - **jjwt for HS256** — same `{email, exp, iat}` claims as the backend it
   replaced, so a token from either validates on the other during an overlap.
-- **One Gradle module** with `api` / `service` / `repository` packages (plus
-  `config` and `cli`). The old backend was one crate with modules; splitting into
-  Gradle subprojects would buy nothing here.
+- **One Gradle module**, packages by capability (`identity`, `security`, `audit`,
+  `practice`, `common`) rather than by layer. The old backend was one crate with
+  modules; splitting into Gradle subprojects would buy nothing here. The billing
+  domain grew past the original `api` / `service` / `repository` layers, so each
+  capability now owns its controller, service and repository.
 - **Config from environment variables only, no Spring profiles** — `NODE_ENV`
   picks dev behavior, and `EnvFiles` resolves `.env` over `.env.dev`.
+- **Anything the `.env` loader supplies is too late for profile resolution** —
+  `EnvFiles` is an `EnvironmentPostProcessor`, so its values reach ordinary
+  config binding (a `PORT` in `.env.dev` really does move the server) but not
+  anything resolved while config data is being processed. That rules out
+  `spring.profiles.active` and any placeholder written against an `.env` key or
+  an environment variable the file is meant to supply. It is why the demo reset
+  is gated on `app.env` (a plain `@Conditional`) rather than on a profile, and
+  why `NODE_ENV` in `.env.dev` is decorative — the app gets `development` from
+  application.yml's default either way.
 - **Flyway, not the old hand-rolled runner** — the schema and its history are
   documented in [DATABASE.md](DATABASE.md).
 

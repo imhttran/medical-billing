@@ -1,0 +1,234 @@
+package com.htt.billing.claim
+
+import com.htt.billing.adjudication.AdjudicationRepository
+import com.htt.billing.adjudication.AdjudicationService
+import com.htt.billing.claim.ClaimRepository.Claim
+import com.htt.billing.claim.ClaimRepository.ClaimSummary
+import com.htt.billing.claim.ClaimRepository.LineInput
+import com.htt.billing.claim.dto.ClaimBody
+import com.htt.billing.common.Inputs
+import com.htt.billing.common.error.Issue
+import com.htt.billing.common.error.NotFoundException
+import com.htt.billing.common.error.ValidationException
+import com.htt.billing.common.error.ValidationIssuesException
+import com.htt.billing.security.AuthorizationService
+import com.htt.billing.security.Permissions
+import java.math.BigDecimal
+import java.math.RoundingMode
+import java.time.Instant
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.stereotype.Service
+import org.springframework.transaction.support.TransactionTemplate
+
+/**
+ * Claims: creating and editing the draft, validating it, and the transitions the
+ * state machine allows.
+ *
+ * Status is never taken from a request. Each action here performs one named move
+ * — and submission performs three, because the simulated payer accepts and
+ * prices immediately where a real one would answer later.
+ */
+@Service
+class ClaimService(
+    private val claims: ClaimRepository,
+    private val facts: ClaimFacts,
+    private val authorization: AuthorizationService,
+    private val adjudication: AdjudicationService,
+    private val transactions: TransactionTemplate,
+) {
+
+    data class Detail(
+        val claim: Claim,
+        val diagnoses: List<ClaimRepository.Diagnosis>,
+        val lines: List<ClaimRepository.Line>,
+        val adjudication: AdjudicationRepository.Adjudication?,
+    )
+
+    fun list(userId: Int, patientId: Int?): List<ClaimSummary> {
+        val organizationIds = authorization.permittedOrganizationIds(userId, Permissions.CLAIM_VIEW)
+        if (organizationIds.isEmpty()) {
+            return emptyList()
+        }
+        return claims.findIn(organizationIds, patientId)
+    }
+
+    fun detail(userId: Int, claimId: Int): Detail = detailOf(requireVisible(userId, claimId))
+
+    fun create(userId: Int, body: ClaimBody): Detail {
+        val organizationId = authorization.resolveWriteOrganization(
+            userId,
+            Permissions.CLAIM_CREATE,
+            body.organizationId,
+        )
+        // The payer is read from the coverage, so the two can never disagree. It is
+        // a snapshot: changing the coverage afterwards does not rewrite a claim
+        // that was already written against the old payer.
+        val coverage = facts.coverageFor(body.coverageId)
+            ?: throw ValidationException("coverageId must name an existing coverage")
+        requireReference(body.patientId, "patientId")
+        requireReference(body.providerId, "providerId")
+
+        var created: Claim? = null
+        try {
+            transactions.executeWithoutResult {
+                val claim = claims.insert(
+                    organizationId = organizationId,
+                    patientId = body.patientId,
+                    providerId = body.providerId,
+                    coverageId = coverage.id,
+                    payerId = coverage.payerId,
+                    serviceDate = Inputs.optionalDate(body.serviceDate, "serviceDate"),
+                )
+                claims.replaceDiagnoses(claim.id, cleanDiagnoses(body.diagnoses))
+                claims.replaceLines(claim.id, parseLines(body.lines))
+                created = claim
+            }
+        } catch (badReference: DataIntegrityViolationException) {
+            // The foreign keys on patient, provider and coverage.
+            throw ValidationException("Unknown patient or provider")
+        }
+        return detailOf(checkNotNull(created))
+    }
+
+    fun update(userId: Int, claimId: Int, body: ClaimBody): Detail {
+        val existing = requireVisible(userId, claimId)
+        authorization.require(userId, Permissions.CLAIM_EDIT, existing.organizationId)
+        if (!ClaimStatus.isEditable(existing.status)) {
+            throw ValidationException("A claim in ${existing.status} can no longer be edited")
+        }
+        val coverage = facts.coverageFor(body.coverageId)
+            ?: throw ValidationException("coverageId must name an existing coverage")
+        requireReference(body.patientId, "patientId")
+        requireReference(body.providerId, "providerId")
+
+        var updated: Claim? = null
+        transactions.executeWithoutResult {
+            val claim = claims.updateHeader(
+                id = claimId,
+                patientId = body.patientId,
+                providerId = body.providerId,
+                coverageId = coverage.id,
+                payerId = coverage.payerId,
+                serviceDate = Inputs.optionalDate(body.serviceDate, "serviceDate"),
+            ) ?: throw NotFoundException("Claim not found")
+            claims.replaceDiagnoses(claimId, cleanDiagnoses(body.diagnoses))
+            claims.replaceLines(claimId, parseLines(body.lines))
+            updated = claim
+        }
+        return detailOf(checkNotNull(updated))
+    }
+
+    /**
+     * Validates without changing anything, so the UI can show every problem at
+     * once. The same rules gate the two transitions below.
+     */
+    fun validate(userId: Int, claimId: Int): List<Issue> = issuesFor(requireVisible(userId, claimId))
+
+    fun markReady(userId: Int, claimId: Int): Detail {
+        val claim = requireVisible(userId, claimId)
+        authorization.require(userId, Permissions.CLAIM_EDIT, claim.organizationId)
+        requireNoIssues(claim)
+        ClaimStatus.requireMove(claim.status, ClaimStatus.READY)
+        return detailOf(
+            claims.updateStatus(claimId, ClaimStatus.READY, submittedAt = null)
+                ?: throw NotFoundException("Claim not found"),
+        )
+    }
+
+    /**
+     * Submits a ready claim and takes the payer's answer. The claim has to be
+     * READY first, because DRAFT to SUBMITTED is not a move the state machine
+     * has — validating and submitting are separate steps on purpose.
+     */
+    fun submit(userId: Int, claimId: Int): Detail {
+        val claim = requireVisible(userId, claimId)
+        authorization.require(userId, Permissions.CLAIM_SUBMIT, claim.organizationId)
+        requireNoIssues(claim)
+        ClaimStatus.requireMove(claim.status, ClaimStatus.SUBMITTED)
+
+        var result: Claim? = null
+        transactions.executeWithoutResult {
+            claims.updateStatus(claimId, ClaimStatus.SUBMITTED, Instant.now())
+                ?: throw NotFoundException("Claim not found")
+
+            // The payer takes the claim, then prices it. Two moves rather than one
+            // jump, so both are checked against the state machine.
+            ClaimStatus.requireMove(ClaimStatus.SUBMITTED, ClaimStatus.ACCEPTED)
+            val accepted = claims.updateStatus(claimId, ClaimStatus.ACCEPTED, submittedAt = null)
+                ?: throw NotFoundException("Claim not found")
+
+            val outcome = adjudication.adjudicate(accepted, claims.findLines(claimId))
+            ClaimStatus.requireMove(ClaimStatus.ACCEPTED, outcome)
+            result = claims.updateStatus(claimId, outcome, submittedAt = null)
+                ?: throw NotFoundException("Claim not found")
+        }
+        return detailOf(checkNotNull(result))
+    }
+
+    private fun issuesFor(claim: Claim): List<Issue> = ClaimValidator.validate(
+        facts.forClaim(
+            claim,
+            claims.findDiagnoses(claim.id).map { it.diagnosisCode },
+            claims.findLines(claim.id).map {
+                LineInput(it.lineNumber, it.procedureCode, it.quantity, it.chargeAmount)
+            },
+        ),
+    )
+
+    private fun requireNoIssues(claim: Claim) {
+        val issues = issuesFor(claim)
+        if (issues.isNotEmpty()) {
+            throw ValidationIssuesException(issues)
+        }
+    }
+
+    /**
+     * Visibility first, then the action: a claim outside the caller's practices
+     * answers "not found" (404) so its existence is not confirmed, while one they
+     * can see but not act on answers 403.
+     */
+    private fun requireVisible(userId: Int, claimId: Int): Claim {
+        val claim = claims.findById(claimId) ?: throw NotFoundException("Claim not found")
+        authorization.requireVisible(userId, Permissions.CLAIM_VIEW, claim.organizationId, "Claim not found")
+        return claim
+    }
+
+    private fun detailOf(claim: Claim): Detail = Detail(
+        claim = claim,
+        diagnoses = claims.findDiagnoses(claim.id),
+        lines = claims.findLines(claim.id),
+        adjudication = adjudication.latestForClaim(claim.id),
+    )
+
+    private fun requireReference(id: Int, field: String) {
+        if (id <= 0) {
+            throw ValidationException("$field is required")
+        }
+    }
+
+    private fun cleanDiagnoses(codes: List<String>): List<String> =
+        codes.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+
+    private fun parseLines(rows: List<com.htt.billing.claim.dto.LineBody>): List<LineInput> =
+        rows.mapIndexed { index, row ->
+            LineInput(
+                lineNumber = index + 1,
+                procedureCode = row.procedureCode.trim(),
+                quantity = row.quantity,
+                chargeAmount = parseCharge(row.chargeAmount),
+            )
+        }
+
+    /** Text in, BigDecimal out: a JSON number coerces as written, so 150.00 stays exact. */
+    private fun parseCharge(raw: String): BigDecimal {
+        val text = raw.trim()
+        if (text.isEmpty()) {
+            throw ValidationException("chargeAmount is required on every line")
+        }
+        return try {
+            BigDecimal(text).setScale(2, RoundingMode.HALF_UP)
+        } catch (notANumber: NumberFormatException) {
+            throw ValidationException("chargeAmount must be a number")
+        }
+    }
+}

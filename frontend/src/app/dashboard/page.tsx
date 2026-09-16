@@ -298,6 +298,13 @@ export default function DashboardPage() {
           </>
         }
       >
+        <a
+          className="logout-link"
+          href="/patients"
+          style={{ marginRight: "1rem" }}
+        >
+          Patients
+        </a>
         <a className="logout-link" href="/" onClick={logout}>
           Logout
         </a>

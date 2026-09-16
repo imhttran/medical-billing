@@ -8,4 +8,4 @@
 # and the .env files simply never load, which is exactly what happened before
 # this file existed.
 org.springframework.boot.env.EnvironmentPostProcessor=\
-com.htt.template.config.EnvFiles
+com.htt.billing.common.config.EnvFiles

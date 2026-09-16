@@ -43,13 +43,13 @@ load_db_url() {
   local url
   url=$(env_file_value .env DATABASE_URL)
   if [ -z "$url" ]; then url=$(env_file_value .env.dev DATABASE_URL); fi
-  if [ -z "$url" ]; then url="postgres://postgres:postgres@localhost:5432/template-db?sslmode=disable"; fi
+  if [ -z "$url" ]; then url="postgres://postgres:postgres@localhost:5432/htt-billing-db?sslmode=disable"; fi
   echo "$url"
 }
 
 # TEST_DATABASE_URL for the integration tests: the real environment variable
 # first, then .env, then .env.dev. Empty when none of them define it, which is
-# what leaves the 12 DB-backed tests skipped.
+# what leaves the DB-backed tests skipped.
 load_test_db_url() {
   local url
   url=$(env_file_value .env TEST_DATABASE_URL)
@@ -428,7 +428,7 @@ k8s_port_forward() {
 
 k8s_psql() {
   require_k8s || return 1
-  kubectl -n "$K8S_NS" exec -it statefulset/postgres -- psql -U postgres -d template-db
+  kubectl -n "$K8S_NS" exec -it statefulset/postgres -- psql -U postgres -d htt-billing-db
 }
 
 # The destructive one: the namespace owns the Postgres volume, so deleting it
@@ -481,7 +481,7 @@ Work
   db:reset [--yes]                  drop and recreate the schema
   db:reseed [--yes]                 drop the schema, restart the backend
 
-TEST_DATABASE_URL enables the 12 DB-backed integration tests; see docs/DATABASE.md.
+TEST_DATABASE_URL enables the DB-backed integration tests; see docs/DATABASE.md.
 USAGE
 }
 

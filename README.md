@@ -34,7 +34,7 @@ the frontend on :3000. Migrations run automatically on the API's first boot.
 ```
 
 `up` refuses to start if Postgres is down, and `DATABASE_URL` must point at
-**`template-db`**. **[docs/DATABASE.md](docs/DATABASE.md)** has the DSN, setting
+**`htt-billing-db`**. **[docs/DATABASE.md](docs/DATABASE.md)** has the DSN, setting
 up a local instance, and what an older `.env` needs.
 
 **Kubernetes** — the same stack on Rancher Desktop's cluster, needs Kubernetes
@@ -90,9 +90,11 @@ backend to Spring port, and the later Java to Kotlin port.
 ## Tests
 
 `make test` (or `./manage.sh test`) runs the backend tests
-(`./gradlew test`) plus the frontend build. 39 tests total; the 12 DB-backed
-integration tests need `TEST_DATABASE_URL` and skip without it, leaving the 27
-unit tests. See **[docs/DATABASE.md](docs/DATABASE.md)** for the test database.
+(`./gradlew test`) plus the frontend build. The DB-backed integration tests need
+`TEST_DATABASE_URL` and skip without it; everything else runs regardless. The
+counts are deliberately not written down here — they went stale every time a
+slice added tests. See **[docs/DATABASE.md](docs/DATABASE.md)** for the test
+database.
 
 ## Roles
 
@@ -103,19 +105,35 @@ make role EMAIL=you@email.com ROLE=admin
 # or: ./manage.sh role you@email.com admin  /  ./manage.sh → [8]
 ```
 
+That is the platform gate the original endpoints use. Billing has its own
+authorization layer beside it: permissions held through organization-scoped
+role assignments, checked server-side. A practice-A user cannot read or mutate a
+practice-B record. See **[docs/FEATURE.md](docs/FEATURE.md)**.
+
 ## Backend
 
 Kotlin 2.2 on a Java 21 toolchain, one Gradle module, source in
-`backend/src/main/kotlin/com/htt/template/`:
+`backend/src/main/kotlin/com/htt/billing/`, organized by capability rather than
+by layer — each package owns its controller, service and repository:
 
-| Package      | What's in it                                                      |
-| ------------ | ----------------------------------------------------------------- |
-| `api`        | controllers, the `AuthUser` argument resolver, the session filter |
-| `api/dto`    | request bodies, read as raw bytes and decoded leniently           |
-| `service`    | auth, tokens, JWT, scrypt hashing, the mail queue, validation     |
-| `repository` | one class per table group, raw SQL through `JdbcClient`           |
-| `config`     | `AppProperties`, the `.env` loader, Hikari and mail wiring        |
-| `cli`        | the out-of-band `set-role` grant                                  |
+| Package    | What's in it                                                                                                                    |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `identity` | the platform user: auth, tokens, JWT, scrypt hashing, the mail queue, profiles, users, the ranked `client`/`staff`/`admin` gate |
+| `security` | billing authorization: permissions, roles, role assignments, and the org-scoped checks                                          |
+| `audit`    | the audit trail                                                                                                                 |
+| `practice` | organizations and providers, the practice and who works in it                                                                   |
+| `patient`  | patients                                                                                                                        |
+| `coverage` | payers and a patient's coverage                                                                                                 |
+| `coding`   | ICD-10-CM and CPT/HCPCS search                                                                                                  |
+| `common`   | HTTP plumbing (`Api`, the exception handler, `Inputs`) and app config                                                           |
+
+Repositories are one class per table group, raw SQL through `JdbcClient`.
+
+A tenant-owned record is read in two steps, and they answer differently on
+purpose. If the caller cannot see the owning organization at all, the response
+is 404, so the API never confirms that a record exists in someone else's
+practice. If they can see it but lack the permission for the action, that is a
+plain 403. See `AuthorizationService.requireVisible`.
 
 ```bash
 cd backend
@@ -131,8 +149,9 @@ trip, are in **[docs/SPRING_MIGRATION.md](docs/SPRING_MIGRATION.md)**.
 
 ## API
 
-19 endpoints under `/api/*` — see the controllers in
-`backend/src/main/kotlin/com/htt/template/api/`:
+40 endpoints under `/api/*` — see the controllers in
+`backend/src/main/kotlin/com/htt/billing/identity/`, `.../practice/`,
+`.../patient/`, `.../coverage/`, `.../coding/`, `.../claim/`:
 
 - **Public auth** (8): signup, verify, resend-verification, forgot-password,
   reset-password, login, login/verify (2FA code), login/resend (2FA code)
@@ -140,3 +159,35 @@ trip, are in **[docs/SPRING_MIGRATION.md](docs/SPRING_MIGRATION.md)**.
   change-password
 - **Staff/admin** (7): list users, create user, delete, verify/unverify,
   change role, resend verification, reset password
+- **Organizations** (1): list, derived from the caller's own grants
+- **Patients** (4): list/search, create, read, update
+- **Coverage** (3): list and create under a patient, update by id
+- **Payers** (1): list, for the coverage picker
+- **Providers** (3): list, create, read
+- **Terminology** (2): search ICD-10-CM diagnoses and CPT/HCPCS procedures
+- **Claims** (7): list, read, create, edit, validate, mark ready, submit. No
+  endpoint sets a status — the two transitions are named actions, and everything
+  else goes through create and edit while the claim is still a draft
+- **Demo reset** (1): rebuild the synthetic dataset. Development and demo only —
+  the route is not registered anywhere else
+
+Routes are unversioned. The plan sketches `/api/v1/...`, but the 19 endpoints
+that already existed are not, and one convention beats two. Moving everything to
+`/api/v1` later is a single change if versioning is ever wanted.
+
+A tenant-owned write never takes the practice from the browser. When the caller
+can write in exactly one practice — every V1 user — the server derives it from
+their own grants, and a named practice is checked against those grants either
+way. An account that can write in several has to say which, because the choice
+is genuinely ambiguous.
+
+The UI has four screens against this API: `/patients` and `/patients/{id}` for
+patients and their coverage, and `/claims` and `/claims/{id}` for the claim
+workflow. `/claims/{id}` is where the golden path is walkable — create, validate,
+mark ready, submit, and read the payer's answer — and it is what Milestone 1's
+acceptance criteria describe.
+
+`GET /api/me` returns the platform role, not billing permissions, so the UI
+cannot hide what the user may not do. It shows the action and displays the
+server's refusal instead; adding the caller's permissions to `/api/me` would let
+it hide them.

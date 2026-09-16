@@ -16,13 +16,13 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: template-db
+      POSTGRES_DB: htt-billing-db
     ports:
       - "5433:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d template-db"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d htt-billing-db"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -40,7 +40,7 @@ services:
     environment:
       # Inside the compose network the database is `db:5432`; the host's 5433
       # mapping is only for tools running on the host.
-      DATABASE_URL: postgres://postgres:postgres@db:5432/template-db?sslmode=disable
+      DATABASE_URL: postgres://postgres:postgres@db:5432/htt-billing-db?sslmode=disable
       NODE_ENV: development
       # Must be at least 32 bytes or the app refuses to start.
       JWT_SECRET: dev-insecure-jwt-secret-not-for-production

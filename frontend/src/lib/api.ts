@@ -120,6 +120,38 @@ export async function callApi<T extends ApiResult = ApiResult>(
   }
 }
 
+/**
+ * A form's mutation. `callApi` logs the failure message because it is used by
+ * action buttons, but a form has to show the reason — a rejected field, or a
+ * permission the user does not hold — so this hands back the parsed body and the
+ * ok flag and leaves the wording to the caller.
+ */
+export async function submitJson<T extends ApiResult = ApiResult>(
+  token: string,
+  path: string,
+  method: string,
+  body?: unknown,
+): Promise<{ ok: boolean; data: T }> {
+  try {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    renewSessionFrom(response);
+    const data = (await response.json()) as T;
+    return { ok: response.ok, data };
+  } catch {
+    return {
+      ok: false,
+      data: { message: "Connection error. Is the backend running?" } as T,
+    };
+  }
+}
+
 // Shared by every authenticated self-service form (change-password, profile):
 // bounces to login if there's no stored session, POSTs via callApi, and
 // sends the user to the dashboard on success.

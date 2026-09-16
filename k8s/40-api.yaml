@@ -45,7 +45,7 @@ spec:
           command:
             - sh
             - -c
-            - until pg_isready -h postgres -U postgres -d template-db; do
+            - until pg_isready -h postgres -U postgres -d htt-billing-db; do
               echo "waiting for postgres"; sleep 2; done
           resources:
             requests:

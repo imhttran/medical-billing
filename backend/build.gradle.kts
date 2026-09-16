@@ -7,7 +7,7 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7"
 }
 
-group = "com.htt"
+group = "com.htt.billing"
 version = "0.0.1-SNAPSHOT"
 
 repositories {
@@ -67,7 +67,7 @@ tasks.withType<Test> {
 tasks.bootJar {
     archiveFileName.set("app.jar")
     // Kotlin's `main` lands on a synthesized <File>Kt class, so name it.
-    mainClass.set("com.htt.template.TemplateApplicationKt")
+    mainClass.set("com.htt.billing.BillingApplicationKt")
 }
 
 tasks.jar {

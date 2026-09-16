@@ -13,7 +13,7 @@ metadata:
     app.kubernetes.io/part-of: spring-template
 data:
   NODE_ENV: development
-  DATABASE_URL: postgres://postgres:postgres@postgres:5432/template-db?sslmode=disable
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/htt-billing-db?sslmode=disable
   # Browser-facing URL of the UI, used for links in outgoing email (verify,
   # reset). The ingress host is the address the browser actually uses.
   FRONTEND_URL: http://template.localhost

@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: template-api
+    name: med-billing
   flyway:
     # Flyway keeps its own history table. A database that already holds these
     # tables — and an earlier migration runner's `schema_migrations` history —
@@ -18,7 +18,7 @@ app:
   # Environment variables, not Spring profiles, so an existing .env / .env.dev
   # keeps working unchanged. See EnvFiles for the precedence rules.
   env: ${NODE_ENV:development}
-  database-url: ${DATABASE_URL:postgres://postgres:postgres@localhost:5432/template-db?sslmode=disable}
+  database-url: ${DATABASE_URL:postgres://postgres:postgres@localhost:5432/htt-billing-db?sslmode=disable}
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
   jwt-secret: ${JWT_SECRET:}
   smtp-host: ${SMTP_HOST:}

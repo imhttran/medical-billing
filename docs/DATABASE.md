@@ -9,13 +9,15 @@ One variable: `DATABASE_URL`. Development has a working default built in.
 root `.env` overrides that.
 
 ```
-postgres://postgres:postgres@localhost:5432/template-db?sslmode=disable
+postgres://postgres:postgres@localhost:5432/htt-billing-db?sslmode=disable
 ```
 
-The database is named **`template-db`** (it was `rust_template` before the
-Spring migration, so an existing `.env` / `.env.example` needs updating). The
-hyphen is legal in a Postgres name but SQL has to quote it, e.g. `DROP DATABASE
-"template-db"`.
+The database is named **`htt-billing-db`** — it was `rust_template`, then
+`template-db`, and was renamed as the app stopped being a template. An existing
+local database keeps its old name, so either rename it in place with
+`ALTER DATABASE "template-db" RENAME TO "htt-billing-db"`, or point
+`DATABASE_URL` at whatever you have. The hyphens are legal in a Postgres name but
+SQL has to quote them, e.g. `DROP DATABASE "htt-billing-db"`.
 
 - `manage.sh` (reset-database, backend startup check) reads `.env` first, then
   `.env.dev`. `set-role` is the exception: it reads `DATABASE_URL` from the
@@ -31,7 +33,7 @@ hyphen is legal in a Postgres name but SQL has to quote it, e.g. `DROP DATABASE
 brew install postgresql@16
 brew services start postgresql@16      # stop with: brew services stop postgresql@16
 createuser -s postgres; psql -d postgres -c "ALTER USER postgres PASSWORD 'postgres';"
-createdb "template-db"
+createdb "htt-billing-db"
 ```
 
 **Option 2 — throwaway instance (no service installed): lost on reboot**
@@ -40,7 +42,7 @@ createdb "template-db"
 initdb -D /tmp/spring-template-pg -A trust
 pg_ctl -D /tmp/spring-template-pg -l /tmp/spring-template-pg.log start
 psql -d postgres -c "CREATE USER postgres WITH PASSWORD 'postgres' SUPERUSER;"
-createdb "template-db" -U postgres
+createdb "htt-billing-db" -U postgres
 ```
 
 Check state anytime: `pg_isready -h localhost` (this is what `manage.sh` runs
@@ -50,8 +52,12 @@ before launching the backend).
 
 Flyway, applied automatically when the Spring API boots:
 
-- Migration files live in `backend/src/main/resources/db/migration/` — one
-  `V1__init.sql` holds the whole schema (users, profiles, the mail queue, 2FA).
+- Migration files live in `backend/src/main/resources/db/migration/` — `V1__init.sql`
+  holds the original schema (users, profiles, the mail queue, 2FA),
+  `V2__billing_rbac.sql` adds organizations and the billing RBAC tables,
+  `V3__patients_providers_coverage_codes.sql` adds the billing entities and the
+  seeded terminology, and `V4__claims_adjudication.sql` adds claims, their
+  diagnoses and lines, adjudications, and the payer fee schedule.
   Flyway reads that location on every boot and records what it applied in a
   `flyway_schema_history` table — a second boot is a no-op, so there's no
   separate migrate step.
@@ -71,16 +77,46 @@ Flyway, applied automatically when the Spring API boots:
 
 Tables:
 
-| Table           | Purpose                                                     |
-| --------------- | ----------------------------------------------------------- |
-| `users`         | accounts: email, scrypt password, role, verify/reset tokens |
-| `user_profiles` | one-time registration details (`ON DELETE CASCADE`)         |
-| `email_queue`   | outbound mail (drained by the `@Scheduled` worker)          |
-| `user_devices`  | trusted 2FA devices that skip the login code                |
-| `login_codes`   | pending 2FA codes (expiry, attempts, resends)               |
+| Table                   | Purpose                                                     |
+| ----------------------- | ----------------------------------------------------------- |
+| `users`                 | accounts: email, scrypt password, role, verify/reset tokens |
+| `user_profiles`         | one-time registration details (`ON DELETE CASCADE`)         |
+| `email_queue`           | outbound mail (drained by the `@Scheduled` worker)          |
+| `user_devices`          | trusted 2FA devices that skip the login code                |
+| `login_codes`           | pending 2FA codes (expiry, attempts, resends)               |
+| `organizations`         | practices; the tenant every billing record is scoped to     |
+| `permissions`           | the permission catalogue                                    |
+| `roles`                 | predefined roles, platform- or organization-scoped          |
+| `role_permissions`      | which permissions each role carries                         |
+| `user_role_assignments` | who holds which role, in which organization                 |
+| `audit_events`          | audit trail for billing and access-management actions       |
+| `providers`             | practitioners, scoped to a practice                         |
+| `patients`              | synthetic patients, scoped to a practice                    |
+| `coverages`             | a patient's insurance, `ON DELETE CASCADE` from `patients`  |
+| `payers`                | shared reference data, not tenant-owned                     |
+| `diagnosis_codes`       | ICD-10-CM terminology, keyed by code                        |
+| `procedure_codes`       | CPT/HCPCS terminology, keyed by code                        |
+| `claims`                | the billable encounter; holds no total, which is summed     |
+| `claim_diagnoses`       | the claim's ICD-10 codes, cascading from `claims`           |
+| `claim_lines`           | its service lines, and the payer's per-line figures         |
+| `adjudications`         | one immutable row per submission                            |
+| `payer_fee_schedule`    | what a payer allows per procedure, and the patient copay    |
 
-Two rules apply to every query in
-`backend/src/main/kotlin/com/htt/template/repository/`. `email_queue`'s column
+`claims` has no `total_charge` column. A stored total is a second copy of the
+line charges that a bug can desync, so it is summed on read. The adjudication
+does store its totals, because that row is the record of what the payer said.
+
+`users.role` is untouched by the billing RBAC tables on purpose — it stays the
+coarse staff/admin gate the original endpoints use, while billing authorization
+reads permissions from `user_role_assignments`.
+
+Every table that belongs to a practice carries `organization_id` and is only
+ever queried with it (`organization_id IN (:ids)` on the list queries). Payers
+and the two code tables have no `organization_id` because they are the same for
+every practice.
+
+Two rules apply to every query in the repository classes (one per capability
+package under `backend/src/main/kotlin/com/htt/billing/`). `email_queue`'s column
 is named `"to"`, a reserved word, so queries quote it. And the
 `AS "camelCase"` aliases are load-bearing rather than decoration: rows map onto
 the row data classes through their primary constructors, matched by parameter
@@ -100,7 +136,7 @@ onboarding gates.
 | Reset **all** data | `./manage.sh db:reset` (drops and recreates the `public` schema)                             |
 | Manual reset       | `psql "$DATABASE_URL" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'`                |
 | Re-seed            | `./manage.sh db:reseed` (drop schema, restart the backend so Flyway re-applies and re-seeds) |
-| Look around        | `psql "template-db" -U postgres` → `\dt`, `\d users`                                         |
+| Look around        | `psql "htt-billing-db" -U postgres` → `\dt`, `\d users`                                      |
 | Promote a user     | `./manage.sh role <email> <role>` (`java -jar build/libs/app.jar set-role`)                  |
 
 `db:reset` asks for lowercase `yes` since `DROP SCHEMA public
@@ -114,9 +150,9 @@ The DB-backed integration tests need a reachable Postgres and are skipped
 otherwise:
 
 ```bash
-createdb "template-db-test"        # once
+createdb "htt-billing-db-test"        # once
 cd backend
-TEST_DATABASE_URL="postgres://postgres:postgres@localhost:5432/template-db-test?sslmode=disable" ./gradlew test
+TEST_DATABASE_URL="postgres://postgres:postgres@localhost:5432/htt-billing-db-test?sslmode=disable" ./gradlew test
 ```
 
 The test context points `app.database-url` at `TEST_DATABASE_URL` and boots
