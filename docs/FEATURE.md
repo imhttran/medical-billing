@@ -11,7 +11,9 @@
   assignments (`PLATFORM_ADMIN`, `PRACTICE_ADMIN`, `BILLING_MANAGER`, `BILLER`,
   `PROVIDER`, `READ_ONLY`), enforced server-side against the organization that
   owns the record. Platform administration holds no patient or claim permission,
-  so it cannot reach practice content. Role assignments are audited
+  so it cannot reach practice content. Role assignments are audited. A practice
+  administrator works claims as well as managing users, since in a small
+  practice the same person does both
 - **Patients, providers and coverage** — created, searched and edited per
   practice. A record in another practice answers 404 rather than 403, so the API
   never confirms that it exists

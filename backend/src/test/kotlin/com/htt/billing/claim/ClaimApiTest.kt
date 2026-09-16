@@ -18,10 +18,10 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
  * contractual adjustment is 40.00, the payer owes 80.00 and the patient owes
  * 30.00.
  *
- * Two roles are involved, which the seeded permission matrix decides rather than
- * this test: PRACTICE_ADMIN sets the practice up (patients, providers, coverage)
- * and supervises claims read-only, while BILLING_MANAGER and BILLER are the ones
- * that hold CLAIM_CREATE and CLAIM_SUBMIT.
+ * The roles here are decided by the seeded permission matrix rather than by this
+ * test: PRACTICE_ADMIN sets the practice up (patients, providers, coverage) and,
+ * since V5, works claims as well; BILLING_MANAGER and BILLER hold the same claim
+ * operations; READ_ONLY holds CLAIM_VIEW and nothing that moves a claim.
  */
 @EnabledIfEnvironmentVariable(named = "TEST_DATABASE_URL", matches = ".+")
 class ClaimApiTest : BillingApiTest() {
@@ -185,6 +185,17 @@ class ClaimApiTest : BillingApiTest() {
         val claimId = createClaim(biller.token, fix.data)
         assertStatus(200, env.doJson("POST", "/api/claims/$claimId/ready", biller.token, null))
         val submitted = env.doJson("POST", "/api/claims/$claimId/submit", biller.token, null)
+        assertStatus(200, submitted)
+        assertEquals("ADJUDICATED", submitted.body.path("claim").path("status").asText())
+    }
+
+    @Test
+    fun aPracticeAdminCanAlsoCreateAndSubmitAClaim() {
+        val fix = fixture()
+
+        val claimId = createClaim(fix.adminToken, fix.data)
+        assertStatus(200, env.doJson("POST", "/api/claims/$claimId/ready", fix.adminToken, null))
+        val submitted = env.doJson("POST", "/api/claims/$claimId/submit", fix.adminToken, null)
         assertStatus(200, submitted)
         assertEquals("ADJUDICATED", submitted.body.path("claim").path("status").asText())
     }
