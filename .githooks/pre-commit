@@ -19,7 +19,7 @@ fi
 (cd backend && ./gradlew build --quiet)
 
 echo "→ frontend: typecheck"
-(cd frontend && npx tsc --noEmit)
+(cd frontend && npm run typecheck)
 
 echo "→ prettier check"
 (cd frontend && npm run format:check)
