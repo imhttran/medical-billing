@@ -33,10 +33,12 @@ import org.springframework.transaction.support.TransactionTemplate
  * can be exercised repeatedly from the same starting point.
  *
  * The reset is scoped to the demo practice's billing records. It deliberately
- * does not touch users, role assignments, other practices, the terminology
- * tables, or the audit trail — those are configured, not synthetic, and erasing
- * them would turn a data reset into an environment wipe. The practice row itself
- * survives for the same reason: audit events point at it.
+ * does not touch users, another practice's rows, the terminology tables, or the
+ * audit trail — those are configured, not synthetic, and erasing them would turn a
+ * data reset into an environment wipe. The practice row itself survives for the
+ * same reason: audit events point at it. The one thing it does write outside the
+ * practice's billing records is the local login's role assignments, which is what
+ * makes the seeded practice visible to it.
  *
  * Claims go first. Everything a claim points at — its lines, its diagnoses, its
  * adjudications, its payments and its work items — cascades from the claim row,
@@ -246,7 +248,9 @@ class DemoResetService(
                 LineInput(
                     lineNumber = index + 1,
                     procedureCode = line.procedureCode,
-                    quantity = line.quantity,
+                    // Every seeded service is billed once; nothing in the dataset
+                    // needs a quantity yet.
+                    quantity = 1,
                     chargeAmount = BigDecimal(line.chargeAmount),
                 )
             },

@@ -1,5 +1,6 @@
 package com.htt.billing.demo
 
+import com.htt.billing.repository.claim.ClaimRepository
 import java.sql.Types
 import org.springframework.jdbc.core.simple.JdbcClient
 
@@ -85,49 +86,19 @@ internal fun paymentsForClaim(jdbc: JdbcClient, claimId: Int): Int = jdbc
     .query(Int::class.javaObjectType)
     .single()
 
-/** The walkthrough claim's money, which is what the plan's milestone states. */
-internal data class WalkthroughClaim(
-    val claimId: Int,
-    val status: String,
-    val totalCharge: String,
-    val totalAllowed: String,
-    val totalAdjustment: String,
-    val payerResponsibility: String,
-    val patientResponsibility: String,
-)
-
-internal fun walkthroughAdjudication(
-    jdbc: JdbcClient,
+/**
+ * The walkthrough claim, found the way the app finds it: the seeded patient's
+ * claims, and the one the plan's milestone is about. The money is a second read —
+ * `AdjudicationRepository.findLatestForClaim` — so the test asserts on what a
+ * caller is served rather than on a query of its own.
+ */
+internal fun walkthroughClaim(
+    claims: ClaimRepository,
     organizationId: Int,
     patientId: Int,
-    serviceDate: String,
-): WalkthroughClaim? = jdbc
-    .sql(
-        """
-        SELECT c.id, c.status, a.total_charge, a.total_allowed, a.total_adjustment,
-               a.payer_responsibility, a.patient_responsibility
-        FROM claims c
-        JOIN adjudications a ON a.claim_id = c.id
-        WHERE c.organization_id = :organizationId AND c.patient_id = :patientId
-          AND c.service_date = CAST(:serviceDate AS DATE)
-        """,
-    )
-    .param("organizationId", organizationId)
-    .param("patientId", patientId)
-    .param("serviceDate", serviceDate)
-    .query { row, _ ->
-        WalkthroughClaim(
-            claimId = row.getInt("id"),
-            status = row.getString("status"),
-            totalCharge = row.getBigDecimal("total_charge").toPlainString(),
-            totalAllowed = row.getBigDecimal("total_allowed").toPlainString(),
-            totalAdjustment = row.getBigDecimal("total_adjustment").toPlainString(),
-            payerResponsibility = row.getBigDecimal("payer_responsibility").toPlainString(),
-            patientResponsibility = row.getBigDecimal("patient_responsibility").toPlainString(),
-        )
-    }
-    .optional()
-    .orElse(null)
+): ClaimRepository.Claim = claims.findIn(listOf(organizationId), patientId)
+    .map { it.claim }
+    .single { it.serviceDate == DemoDataset.CLAIMS.first().serviceDate }
 
 /** The id of the seeded patient, so a test can prove it survived a reset. */
 internal fun demoPatientId(jdbc: JdbcClient, organizationId: Int): Int? = jdbc

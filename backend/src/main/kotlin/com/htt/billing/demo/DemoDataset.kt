@@ -178,7 +178,6 @@ object DemoDataset {
     data class DemoClaimLine(
         val procedureCode: String,
         val chargeAmount: String,
-        val quantity: Int = 1,
     )
 
     /** How far the seed takes a claim. Everything past this is the operator's work. */

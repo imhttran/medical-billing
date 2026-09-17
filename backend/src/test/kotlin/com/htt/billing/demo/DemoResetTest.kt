@@ -1,9 +1,8 @@
 package com.htt.billing.demo
 
 import com.htt.billing.common.error.ForbiddenException
-import com.htt.billing.claim.ClaimFacts
 import com.htt.billing.claim.ClaimStatus
-import com.htt.billing.claim.ClaimValidator
+import com.htt.billing.repository.adjudication.AdjudicationRepository
 import com.htt.billing.repository.claim.ClaimRepository
 import com.htt.billing.security.RoleCodes
 import com.htt.billing.service.claim.ClaimService
@@ -36,7 +35,10 @@ class DemoResetTest : BillingApiTest() {
     private lateinit var claimRepository: ClaimRepository
 
     @Autowired
-    private lateinit var claimFacts: ClaimFacts
+    private lateinit var adjudications: AdjudicationRepository
+
+    @Autowired
+    private lateinit var claimService: ClaimService
 
     @AfterEach
     fun removeDemoPractice() {
@@ -91,25 +93,23 @@ class DemoResetTest : BillingApiTest() {
         demo.reset(platformAdminId)
 
         val organizationId = demoOrganizationId(jdbc)!!
-        val walkthrough = DemoDataset.CLAIMS.first()
-        val patientId = demoPatientId(jdbc, organizationId)!!
-        val claim = walkthroughAdjudication(
-            jdbc,
+        val claim = walkthroughClaim(
+            claimRepository,
             organizationId,
-            patientId,
-            walkthrough.serviceDate.toString(),
+            demoPatientId(jdbc, organizationId)!!,
         )
+        val adjudication = adjudications.findLatestForClaim(claim.id)
 
-        // The milestone's numbers, asserted against the seeded row rather than
-        // against the simulator. A seeded claim that stopped matching them would
-        // be a demo that contradicts the plan.
-        assertNotNull(claim) { "the walkthrough claim was not seeded" }
-        assertEquals("ADJUDICATED", claim!!.status)
-        assertEquals("150.00", claim.totalCharge)
-        assertEquals("110.00", claim.totalAllowed)
-        assertEquals("40.00", claim.totalAdjustment)
-        assertEquals("80.00", claim.payerResponsibility)
-        assertEquals("30.00", claim.patientResponsibility)
+        // The milestone's numbers, read through the app rather than recomputed. A
+        // seeded claim that stopped matching them would be a demo that contradicts
+        // the plan.
+        assertEquals(ClaimStatus.ADJUDICATED, claim.status)
+        assertNotNull(adjudication) { "the walkthrough claim was not adjudicated" }
+        assertEquals("150.00", adjudication!!.totalCharge.toPlainString())
+        assertEquals("110.00", adjudication.totalAllowed.toPlainString())
+        assertEquals("40.00", adjudication.totalAdjustment.toPlainString())
+        assertEquals("80.00", adjudication.payerResponsibility.toPlainString())
+        assertEquals("30.00", adjudication.patientResponsibility.toPlainString())
     }
 
     @Test
@@ -164,13 +164,11 @@ class DemoResetTest : BillingApiTest() {
             seededAuditEventCount(jdbc, organizationId, ClaimService.ACTION_CLAIM_SUBMITTED),
         )
 
-        val walkthrough = DemoDataset.CLAIMS.first()
-        val walkthroughClaimId = walkthroughAdjudication(
-            jdbc,
+        val walkthroughClaimId = walkthroughClaim(
+            claimRepository,
             organizationId,
             demoPatientId(jdbc, organizationId)!!,
-            walkthrough.serviceDate.toString(),
-        )!!.claimId
+        ).id
         assertEquals(
             1,
             seededAuditEventCount(
@@ -189,24 +187,21 @@ class DemoResetTest : BillingApiTest() {
         demo.reset(platformAdminId)
 
         val organizationId = demoOrganizationId(jdbc)!!
+        // The app's own validation is asked through the service, which is what a
+        // biller's screen asks, so the seed is held to the same rule rather than to
+        // a second reading of it. A billing manager is the account that can see the
+        // practice's claims.
+        val billerId = insertUser("demo-biller")
+        assign(billerId, RoleCodes.BILLING_MANAGER, organizationId)
+
         val seeded = claimRepository.findIn(listOf(organizationId), null).map { it.claim }
         assertEquals(DemoDataset.CLAIMS.size, seeded.size)
 
         // Anything past DRAFT is a claim the app would have validated before moving
-        // it, so the seed's claims have to satisfy the same rules. The drafts are
-        // left out on purpose: one of them is incomplete so the validation screen
-        // has something to report.
-        val moved = seeded.filter { it.status != ClaimStatus.DRAFT }
-        moved.forEach { claim ->
-            val issues = ClaimValidator.validate(
-                claimFacts.forClaim(
-                    claim,
-                    claimRepository.findDiagnoses(claim.id).map { it.diagnosisCode },
-                    claimRepository.findLines(claim.id).map {
-                        ClaimRepository.LineInput(it.lineNumber, it.procedureCode, it.quantity, it.chargeAmount)
-                    },
-                ),
-            )
+        // it. The drafts are left out on purpose: one of them is incomplete so the
+        // validation screen has something to report.
+        seeded.filter { it.status != ClaimStatus.DRAFT }.forEach { claim ->
+            val issues = claimService.validate(billerId, claim.id)
             assertTrue(issues.isEmpty()) {
                 "${claim.claimNumber} is not a claim the app would have accepted: " +
                     issues.joinToString(", ") { it.code }
