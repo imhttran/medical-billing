@@ -32,3 +32,6 @@ replay_pid*.log
 
 # Playwright MCP artifacts
 .playwright-mcp/
+
+
+demo/
