@@ -8,7 +8,7 @@ import {
   type MouseEvent,
 } from "react";
 import { useParams } from "next/navigation";
-import { submitJson } from "@/lib/api";
+import { getJson, submitJson } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -87,21 +87,18 @@ export default function PatientDetailPage() {
     async (authToken: string) => {
       const [patientResult, coverageResult, payerResult, balanceResult] =
         await Promise.all([
-          submitJson<{ patient: Patient }>(
+          getJson<{ patient: Patient }>(
             authToken,
             `/api/patients/${patientId}`,
-            "GET",
           ),
-          submitJson<{ coverages: Coverage[] }>(
+          getJson<{ coverages: Coverage[] }>(
             authToken,
             `/api/patients/${patientId}/coverages`,
-            "GET",
           ),
-          submitJson<{ payers: Payer[] }>(authToken, "/api/payers", "GET"),
-          submitJson<{ balance: Balance }>(
+          getJson<{ payers: Payer[] }>(authToken, "/api/payers"),
+          getJson<{ balance: Balance }>(
             authToken,
             `/api/patients/${patientId}/balance`,
-            "GET",
           ),
         ]);
 

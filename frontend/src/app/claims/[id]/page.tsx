@@ -8,7 +8,7 @@ import {
   type MouseEvent,
 } from "react";
 import { useParams } from "next/navigation";
-import { submitJson } from "@/lib/api";
+import { getJson, submitJson } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -112,10 +112,9 @@ export default function ClaimDetailPage() {
    */
   const loadPayments = useCallback(
     async (authToken: string) => {
-      const { ok, data } = await submitJson<{ payments: Payments }>(
+      const { ok, data } = await getJson<{ payments: Payments }>(
         authToken,
         `/api/claims/${claimId}/payments`,
-        "GET",
       );
       // A role without PAYMENT_VIEW may see the claim and not its money, which
       // leaves the section off the page rather than erroring.
@@ -126,10 +125,9 @@ export default function ClaimDetailPage() {
 
   const load = useCallback(
     async (authToken: string) => {
-      const claim = await submitJson<ClaimDetail>(
+      const claim = await getJson<ClaimDetail>(
         authToken,
         `/api/claims/${claimId}`,
-        "GET",
       );
       if (!claim.ok) {
         setFailed(true);
@@ -139,10 +137,9 @@ export default function ClaimDetailPage() {
       setFailed(false);
 
       // The patient's coverages, so a claim can be corrected onto the right one.
-      const listed = await submitJson<{ coverages: Coverage[] }>(
+      const listed = await getJson<{ coverages: Coverage[] }>(
         authToken,
         `/api/patients/${claim.data.claim.patientId}/coverages`,
-        "GET",
       );
       setCoverages(listed.ok ? listed.data.coverages : []);
 

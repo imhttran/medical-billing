@@ -10,7 +10,7 @@ import {
   type MouseEvent,
   type ReactEventHandler,
 } from "react";
-import { callApi, submitJson } from "@/lib/api";
+import { callApi, getJson } from "@/lib/api";
 import { ROLES, hasRole } from "@/lib/roles";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -146,10 +146,9 @@ export default function DashboardPage() {
   const isStaff = me ? hasRole(me.role, "staff") : false;
 
   const loadUsers = useCallback(async (authToken: string) => {
-    const { ok, data } = await submitJson<{ users?: UserRow[] }>(
+    const { ok, data } = await getJson<{ users?: UserRow[] }>(
       authToken,
       "/api/users",
-      "GET",
     );
     if (!ok || !data.users) {
       setUsersFailed(true);
@@ -170,22 +169,16 @@ export default function DashboardPage() {
       }
 
       try {
-        // notify=false: this is the page's own auto-load, not an action
-        // the user requested — redirect on failure instead of alerting.
-        const result = await callApi<{ user: MeUser }>(
-          stored,
-          "/api/me",
-          "GET",
-          undefined,
-          false,
-        );
-        if (!result) {
+        // This is the page's own auto-load, not an action the user requested —
+        // redirect on failure instead of alerting.
+        const session = await getJson<{ user: MeUser }>(stored, "/api/me");
+        if (!session.ok) {
           // Token expired or invalid? Clear it and kick back to login.
           localStorage.removeItem("auth_token");
           window.location.href = "/";
           return;
         }
-        const user = result.user;
+        const user = session.data.user;
         // Admin-created accounts start with a temp password — force a change
         // before anything else in the dashboard is usable.
         if (user.mustChangePassword) {

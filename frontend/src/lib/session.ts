@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { callApi } from "./api";
+import { getJson } from "./api";
 
 export type SessionUser = {
   id: number;
@@ -31,29 +31,22 @@ export function useSession() {
         window.location.href = "/";
         return;
       }
-      // notify=false: this is the page's own load, so a failure redirects
-      // instead of alerting.
-      const result = await callApi<{ user: SessionUser }>(
-        stored,
-        "/api/me",
-        "GET",
-        undefined,
-        false,
-      );
-      if (!result) {
+      // This is the page's own load, so a failure redirects instead of alerting.
+      const session = await getJson<{ user: SessionUser }>(stored, "/api/me");
+      if (!session.ok) {
         localStorage.removeItem("auth_token");
         window.location.href = "/";
         return;
       }
-      if (result.user.mustChangePassword) {
+      if (session.data.user.mustChangePassword) {
         window.location.href = "/change-password";
         return;
       }
-      if (!result.user.hasProfile) {
+      if (!session.data.user.hasProfile) {
         window.location.href = "/profile";
         return;
       }
-      setMe(result.user);
+      setMe(session.data.user);
     })();
   }, []);
 

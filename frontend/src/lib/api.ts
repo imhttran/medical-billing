@@ -12,7 +12,7 @@ type ApiResult = { message?: string; [key: string]: unknown };
 const UNREACHABLE = "Connection error. Is the backend running?";
 
 /** A parsed answer, and whether the API answered at all rather than the network failing. */
-type ApiOutcome<T> = { ok: boolean; data: T; unreachable?: boolean };
+export type ApiOutcome<T> = { ok: boolean; data: T; unreachable?: boolean };
 
 // Sliding sessions: every successful authed response may carry a fresh JWT
 // (X-Renewed-Token) once the current one is past half its 10-minute life —
@@ -144,6 +144,17 @@ export async function submitJson<T extends ApiResult = ApiResult>(
       unreachable: true,
     };
   }
+}
+
+/**
+ * A read, which is what most of the pages do: `submitJson` with the method and
+ * the body left out.
+ */
+export function getJson<T extends ApiResult = ApiResult>(
+  token: string,
+  path: string,
+): Promise<ApiOutcome<T>> {
+  return submitJson<T>(token, path, "GET");
 }
 
 // Shared by every authenticated self-service form (change-password, profile):

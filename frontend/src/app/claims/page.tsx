@@ -9,7 +9,7 @@ import {
   type MouseEvent,
 } from "react";
 import { useRouter } from "next/navigation";
-import { submitJson } from "@/lib/api";
+import { getJson, submitJson } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -67,18 +67,16 @@ export default function ClaimsPage() {
       diagnosisResult,
       procedureResult,
     ] = await Promise.all([
-      submitJson<{ claims: ClaimSummary[] }>(authToken, "/api/claims", "GET"),
-      submitJson<{ patients: Patient[] }>(authToken, "/api/patients", "GET"),
-      submitJson<{ providers: Provider[] }>(authToken, "/api/providers", "GET"),
-      submitJson<{ diagnoses: Code[] }>(
+      getJson<{ claims: ClaimSummary[] }>(authToken, "/api/claims"),
+      getJson<{ patients: Patient[] }>(authToken, "/api/patients"),
+      getJson<{ providers: Provider[] }>(authToken, "/api/providers"),
+      getJson<{ diagnoses: Code[] }>(
         authToken,
         "/api/codes/diagnoses?limit=100",
-        "GET",
       ),
-      submitJson<{ procedures: Code[] }>(
+      getJson<{ procedures: Code[] }>(
         authToken,
         "/api/codes/procedures?limit=100",
-        "GET",
       ),
     ]);
 
@@ -107,10 +105,9 @@ export default function ClaimsPage() {
     setCoverages([]);
     if (!patientId) return;
     withToken(async (authToken) => {
-      const { ok, data } = await submitJson<{ coverages: Coverage[] }>(
+      const { ok, data } = await getJson<{ coverages: Coverage[] }>(
         authToken,
         `/api/patients/${patientId}/coverages`,
-        "GET",
       );
       setCoverages(ok ? data.coverages.filter((c) => c.active) : []);
     });

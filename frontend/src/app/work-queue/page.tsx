@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
-import { submitJson } from "@/lib/api";
+import { getJson, submitJson } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -44,10 +44,9 @@ export default function WorkQueuePage() {
 
   const load = useCallback(
     async (authToken: string) => {
-      const { ok, data } = await submitJson<{ workItems: WorkItem[] }>(
+      const { ok, data } = await getJson<{ workItems: WorkItem[] }>(
         authToken,
         `/api/work-items?status=${status}`,
-        "GET",
       );
       if (ok) setItems(data.workItems);
       setFailed(!ok);

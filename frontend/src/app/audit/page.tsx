@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
-import { submitJson } from "@/lib/api";
+import { getJson } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -71,10 +71,9 @@ export default function AuditPage() {
     async (authToken: string) => {
       const query = new URLSearchParams({ limit });
       if (action) query.set("action", action);
-      const { ok, data } = await submitJson<{ auditEvents: AuditEvent[] }>(
+      const { ok, data } = await getJson<{ auditEvents: AuditEvent[] }>(
         authToken,
         `/api/audit-events?${query.toString()}`,
-        "GET",
       );
       if (ok) setEvents(data.auditEvents);
       setFailed(!ok);
