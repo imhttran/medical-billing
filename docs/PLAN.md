@@ -1,5 +1,29 @@
 # Medical Billing Application — V1 Plan
 
+## Status
+
+V1 is built, on synthetic data only. Every milestone in section 19 landed and every task in section 23 is done, so the definition of success in section 24 holds. What the milestones left open is below. `docs/FEATURE.md` says what the build does, `README.md` has the endpoint list and the local logins, and `docs/DATABASE.md` covers the connection and how the schema is managed.
+
+Four plan lines are answered differently on purpose.
+
+- The API is unversioned, `/api/*`, where the plan sketches `/api/v1/...`.
+- Resubmission is `POST /api/claims/{id}/submit`, which picks `CLAIM_SUBMIT` or `CLAIM_RESUBMIT` from the claim's current status. There is no `/correct` route, because correcting a claim is editing it and sending it again.
+- The simulated payer refuses on one rule, the member not being covered on the date of service, and denies on one, a service it has no rate for. The rest of section 10's examples belong to claim validation, which is where they were built.
+- Claim history is the audit trail rather than a per-claim timeline. `GET /api/audit-events` and the `/audit` screen carry each submission and resubmission.
+
+Not built:
+
+- The Milestone 0 health endpoint. Nothing polls one, and there is no `/health` route.
+- Inbound ClaimResponse import. Our simulated payers send nothing back, so the reverse of the export waits on a real requirement.
+- A billing role-assignment endpoint. `RoleAdminService` enforces and audits the rule but nothing exposes it over HTTP, so V1 assigns platform roles through user administration and practice roles through seeding.
+- The R4 `diagnosis` element on FHIR export. HAPI's `diagnosisCodeableConcept` spelling is what goes out. The import accepts both, so only conformant senders see the difference.
+- The old template naming in `README.md`, `frontend/src/app/layout.tsx` and `k8s/`, which still says `spring-template` in the namespace, the config maps and the hostname.
+
+Two open permission decisions, both written up in the permission matrix section of `docs/FEATURE.md`:
+
+- `PLATFORM_ADMIN` holds `ROLE_ASSIGN` at platform scope, so it can grant itself a practice role.
+- `PRACTICE_ADMIN` holds `PAYMENT_VIEW` but not `PAYMENT_RECORD`, so a practice whose only administrator is a practice admin cannot record a patient payment.
+
 ## 1. Purpose
 
 Build a simple medical billing application for a small U.S. primary-care practice. The application is billing-focused rather than an EHR. It supports manual claim entry and is designed to accept/export FHIR R4 data later.
@@ -1077,6 +1101,8 @@ Cover the primary billing scenarios:
 
 ## 19. Implementation Milestones
 
+All eight milestones are built. The status section at the top names what they left open.
+
 ### Milestone 0 — Project Foundation + RBAC
 
 Deliver:
@@ -1265,9 +1291,9 @@ Do not add rejection/denial complexity until this golden path works end-to-end.
 
 ```text
 medical-billing/
-├── PLAN.md
+├── docs/PLAN.md
 ├── README.md
-├── compose.yaml
+├── docker-compose.yml
 ├── frontend/
 │   ├── package.json
 │   ├── next.config.*
@@ -1278,44 +1304,50 @@ medical-billing/
     ├── settings.gradle.kts
     ├── src/
     │   ├── main/
-    │   │   ├── kotlin/
+    │   │   ├── kotlin/com/htt/billing/
+    │   │   │   ├── api/           controllers and request bodies, by capability
+    │   │   │   ├── service/       application services, by capability
+    │   │   │   ├── repository/    the SQL, by capability
+    │   │   │   └── <capability>/  domain types that belong to no layer
     │   │   └── resources/
     │   │       └── db/migration/
     │   └── test/
     └── ...
 ```
 
+Controllers, services and repositories each sit in their layer's package with the capability as the sub-package, so `repository/patient/PatientRepository.kt` and `api/patient/PatientController.kt`. Everything else stays in its capability package.
+
 ## 23. First Development Tasks
 
 Start with these tasks in order:
 
-- [ ] Create repository structure.
-- [ ] Generate Kotlin/Spring Boot application.
-- [ ] Generate Next.js/TypeScript application.
-- [ ] Add PostgreSQL to Docker Compose.
-- [ ] Configure Spring Boot database connectivity.
-- [ ] Add Flyway.
-- [ ] Add Spring Security foundation.
-- [ ] Create User, Role, Permission, RolePermission, and UserRoleAssignment schema.
-- [ ] Seed predefined roles and permissions.
-- [ ] Implement organization-scoped authorization service.
-- [ ] Seed a development PLATFORM_ADMIN.
-- [ ] Implement dev/demo-only SYSTEM_RESET endpoint.
-- [ ] Add cross-organization authorization tests.
-- [ ] Create Organization, Provider, Patient, Payer, and Coverage schema.
-- [ ] Seed one synthetic organization.
-- [ ] Seed one synthetic provider.
-- [ ] Seed Jane Smith.
-- [ ] Seed one synthetic payer and primary coverage.
-- [ ] Create Claim, ClaimDiagnosis, and ClaimLine schema.
-- [ ] Implement claim creation API.
-- [ ] Implement claim validation service.
-- [ ] Implement claim state machine.
-- [ ] Implement deterministic payer simulator.
-- [ ] Implement adjudication persistence.
-- [ ] Build minimal patient/claim UI.
-- [ ] Display adjudication result.
-- [ ] Add golden-path integration test.
+- [x] Create repository structure.
+- [x] Generate Kotlin/Spring Boot application.
+- [x] Generate Next.js/TypeScript application.
+- [x] Add PostgreSQL to Docker Compose.
+- [x] Configure Spring Boot database connectivity.
+- [x] Add Flyway.
+- [x] Add Spring Security foundation.
+- [x] Create User, Role, Permission, RolePermission, and UserRoleAssignment schema.
+- [x] Seed predefined roles and permissions.
+- [x] Implement organization-scoped authorization service.
+- [x] Seed a development PLATFORM_ADMIN.
+- [x] Implement dev/demo-only SYSTEM_RESET endpoint.
+- [x] Add cross-organization authorization tests.
+- [x] Create Organization, Provider, Patient, Payer, and Coverage schema.
+- [x] Seed one synthetic organization.
+- [x] Seed one synthetic provider.
+- [x] Seed Jane Smith.
+- [x] Seed one synthetic payer and primary coverage.
+- [x] Create Claim, ClaimDiagnosis, and ClaimLine schema.
+- [x] Implement claim creation API.
+- [x] Implement claim validation service.
+- [x] Implement claim state machine.
+- [x] Implement deterministic payer simulator.
+- [x] Implement adjudication persistence.
+- [x] Build minimal patient/claim UI.
+- [x] Display adjudication result.
+- [x] Add golden-path integration test.
 
 ## 24. Definition of V1 Success
 
