@@ -149,10 +149,10 @@ trip, are in **[docs/SPRING_MIGRATION.md](docs/SPRING_MIGRATION.md)**.
 
 ## API
 
-52 endpoints under `/api/*` — see the controllers in
+53 endpoints under `/api/*` — see the controllers in
 `backend/src/main/kotlin/com/htt/billing/identity/`, `.../practice/`,
 `.../patient/`, `.../coverage/`, `.../coding/`, `.../claim/`, `.../payment/`,
-`.../workflow/`, `.../fhir/`:
+`.../workflow/`, `.../audit/`, `.../fhir/`:
 
 - **Public auth** (8): signup, verify, resend-verification, forgot-password,
   reset-password, login, login/verify (2FA code), login/resend (2FA code)
@@ -172,6 +172,9 @@ trip, are in **[docs/SPRING_MIGRATION.md](docs/SPRING_MIGRATION.md)**.
   the transitions are named actions, and everything else goes through create and
   edit while the claim is still editable
 - **Work queue** (4): list, read, assign, resolve
+- **Audit** (1): the trail for the caller's practices, newest first, filterable by
+  practice and action and bounded in size. Read-only — there is no endpoint that
+  writes or erases an audit event
 - **FHIR** (4): import a Bundle of Patients, Practitioners, Coverages and Claims;
   export a claim as a FHIR Claim; export what the payer made of it as an
   ExplanationOfBenefit and as the ClaimResponse a payer sends back. This is the
@@ -189,6 +192,12 @@ can write in exactly one practice — every V1 user — the server derives it fr
 their own grants, and a named practice is checked against those grants either
 way. An account that can write in several has to say which, because the choice
 is genuinely ambiguous.
+
+The rows a write names have to belong to that practice too. A claim's patient,
+provider and coverage arrive as ids in the body, so naming another practice's row
+is refused where the claim is written rather than left to validation: the foreign
+keys would accept it, and a claim in one practice pointing at another's patient
+is not a state the API should be able to produce.
 
 The UI has five screens against this API: `/patients` and `/patients/{id}` for
 patients and their coverage, `/claims` and `/claims/{id}` for the claim workflow,

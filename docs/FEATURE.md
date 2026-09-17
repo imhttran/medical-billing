@@ -14,6 +14,14 @@
   so it cannot reach practice content. Role assignments are audited. A practice
   administrator works claims as well as managing users, since in a small
   practice the same person does both
+- **Audit trail** — role assignments, demo resets, claim submissions and patient
+  payments are recorded in the same transaction as the act, and the work queue
+  records its assignments and resolutions. `GET /api/audit-events` reads them
+  back: the caller's practices, newest first, filterable by practice and action
+  and bounded in size. A practice reads only its own, and the events that belong
+  to no practice — platform-wide role assignments — are shown only to a
+  platform-scoped `AUDIT_VIEW`. Metadata is ids and codes, never patient
+  information
 - **Patients, providers and coverage** — created, searched and edited per
   practice. A record in another practice answers 404 rather than 403, so the API
   never confirms that it exists
@@ -85,3 +93,35 @@
   forwarded to the Spring Boot API, so it's never exposed directly
 - **Theming** — UT Austin navy/orange, light and dark variants that follow the
   system setting
+
+## Permission matrix
+
+The V1 matrix, reviewed and settled in Milestone 8. `PermissionMatrixTest` holds
+it to the rules the review set: platform administration carries no practice
+content, no permission is granted to nobody, only platform-scoped roles touch the
+platform, and the read-only and billing roles cannot administer anything.
+
+| Role              | Scope        | Holds                                                                                                                                                                           |
+| ----------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PLATFORM_ADMIN`  | platform     | platform operations: system, organization and user administration, role management, the audit trail, demo reset. No patient, coverage, claim, payment, queue or FHIR permission |
+| `PRACTICE_ADMIN`  | organization | runs one practice: its users and role assignments, providers, patients, coverage, claims (create, edit, submit, resubmit), the work queue, payments read, audit trail           |
+| `BILLING_MANAGER` | organization | the whole billing workflow: claims including void, the queue including assignment, payments read and recorded, FHIR import and export, audit trail                              |
+| `BILLER`          | organization | works claims — create, edit, submit, resubmit — resolves queue items, records patient payments. No void, no assignment, no audit access                                         |
+| `PROVIDER`        | organization | sees patients and coverage and writes claims. Nothing that touches money                                                                                                        |
+| `READ_ONLY`       | organization | reads clinical, billing and audit content and moves nothing                                                                                                                     |
+
+The billing roles hold no `ROLE_ASSIGN`, `ROLE_MANAGE` or `SYSTEM_RESET`, so
+running the workflow never includes deciding who may run it.
+
+Two things the review left as they are, because changing them is a product
+decision rather than a correction:
+
+- **No billing role-assignment endpoint.** `RoleAdminService` enforces and audits
+  the rule — an assignment is authorized at the target scope, and a
+  platform-scoped role cannot be pinned to a practice — but nothing exposes it
+  over HTTP. V1 changes platform roles through user administration and billing
+  roles through seeding.
+- **`PLATFORM_ADMIN` holds `ROLE_ASSIGN` at platform scope**, so it can grant a
+  practice role — including to itself. It is explicit and audited, and the plan
+  expects a platform administrator to create a practice's first administrator,
+  but it is the one path from platform administration to practice content.

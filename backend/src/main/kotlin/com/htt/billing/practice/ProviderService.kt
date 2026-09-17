@@ -2,7 +2,6 @@ package com.htt.billing.practice
 
 import com.htt.billing.common.Inputs
 import com.htt.billing.common.error.NotFoundException
-import com.htt.billing.common.error.ValidationException
 import com.htt.billing.practice.ProviderRepository.Provider
 import com.htt.billing.practice.dto.ProviderBody
 import com.htt.billing.security.AuthorizationService
@@ -33,12 +32,18 @@ class ProviderService(
         return provider
     }
 
+    /**
+     * A provider is written to the caller's practice, derived rather than named —
+     * the same rule every other create follows, so the browser never supplies the
+     * tenant it writes to. A named practice is still checked against the caller's
+     * grants.
+     */
     fun create(userId: Int, body: ProviderBody): Provider {
-        val organizationId = body.organizationId
-        if (organizationId <= 0) {
-            throw ValidationException("organizationId is required")
-        }
-        authorization.require(userId, Permissions.PROVIDER_MANAGE, organizationId)
+        val organizationId = authorization.resolveWriteOrganization(
+            userId,
+            Permissions.PROVIDER_MANAGE,
+            body.organizationId,
+        )
         return providers.insert(
             organizationId = organizationId,
             firstName = Inputs.requiredText(body.firstName, "firstName"),

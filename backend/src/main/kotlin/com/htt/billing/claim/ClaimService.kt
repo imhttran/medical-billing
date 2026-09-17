@@ -3,6 +3,7 @@ package com.htt.billing.claim
 import com.htt.billing.adjudication.AdjudicationRepository
 import com.htt.billing.adjudication.AdjudicationService
 import com.htt.billing.adjudication.PayerSimulator
+import com.htt.billing.audit.AuditRepository
 import com.htt.billing.claim.ClaimRepository.Claim
 import com.htt.billing.claim.ClaimRepository.ClaimSummary
 import com.htt.billing.claim.ClaimRepository.LineInput
@@ -39,6 +40,7 @@ class ClaimService(
     private val adjudication: AdjudicationService,
     private val payments: PaymentService,
     private val queue: WorkQueueService,
+    private val audit: AuditRepository,
     private val transactions: TransactionTemplate,
 ) {
 
@@ -72,6 +74,7 @@ class ClaimService(
             ?: throw ValidationException("coverageId must name an existing coverage")
         requireReference(body.patientId, "patientId")
         requireReference(body.providerId, "providerId")
+        facts.requireInPractice(organizationId, body.patientId, body.providerId, coverage)
 
         var created: Claim? = null
         try {
@@ -105,6 +108,9 @@ class ClaimService(
             ?: throw ValidationException("coverageId must name an existing coverage")
         requireReference(body.patientId, "patientId")
         requireReference(body.providerId, "providerId")
+        // The references come from the body here too, so an edit cannot re-point a
+        // claim at another practice's rows either.
+        facts.requireInPractice(existing.organizationId, body.patientId, body.providerId, coverage)
 
         var updated: Claim? = null
         transactions.executeWithoutResult {
@@ -212,6 +218,19 @@ class ClaimService(
                     rejectionMessage = rejection.message,
                 ) ?: throw NotFoundException("Claim not found")
             }
+            // Sending a claim to the payer is the billing act this trail exists
+            // for, so it is recorded in the same transaction as the move — and a
+            // submission the payer refused is recorded like any other.
+            val settled = checkNotNull(result)
+            audit.record(
+                userId = userId,
+                organizationId = claim.organizationId,
+                action = if (resubmission) ACTION_CLAIM_RESUBMITTED else ACTION_CLAIM_SUBMITTED,
+                entityType = ENTITY_CLAIM,
+                entityId = claimId.toString(),
+                metadataJson = """{"claimNumber":"${claim.claimNumber}",""" +
+                        """"status":"${settled.status}","submissionVersion":${settled.submissionVersion}}""",
+            )
         }
         return detailOf(checkNotNull(result))
     }
@@ -327,4 +346,10 @@ class ClaimService(
 
     /** Text in, BigDecimal out: a JSON number coerces as written, so 150.00 stays exact. */
     private fun parseCharge(raw: String): BigDecimal = Inputs.requiredMoney(raw, "chargeAmount")
+
+    companion object {
+        const val ACTION_CLAIM_SUBMITTED = "CLAIM_SUBMITTED"
+        const val ACTION_CLAIM_RESUBMITTED = "CLAIM_RESUBMITTED"
+        const val ENTITY_CLAIM = "Claim"
+    }
 }

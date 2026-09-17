@@ -1,5 +1,6 @@
 package com.htt.billing.payment
 
+import com.htt.billing.audit.AuditRepository
 import com.htt.billing.claim.ClaimRepository
 import com.htt.billing.claim.ClaimStatus
 import com.htt.billing.common.Inputs
@@ -34,6 +35,7 @@ class PaymentService(
     private val claims: ClaimRepository,
     private val patients: PatientRepository,
     private val authorization: AuthorizationService,
+    private val audit: AuditRepository,
     private val transactions: TransactionTemplate,
 ) {
 
@@ -108,6 +110,17 @@ class PaymentService(
                 claims.updateStatus(claimId, next, submittedAt = null)
                     ?: throw NotFoundException("Claim not found")
             }
+            // Money arriving is an event worth a record. The payer's remittance is
+            // not: it is part of the submission, which is audited where it happens.
+            audit.record(
+                userId = userId,
+                organizationId = claim.organizationId,
+                action = ACTION_PAYMENT_RECORDED,
+                entityType = ENTITY_CLAIM,
+                entityId = claimId.toString(),
+                metadataJson = """{"claimNumber":"${claim.claimNumber}","amount":"$amount",""" +
+                        """"claimStatus":"$next"}""",
+            )
         }
         return checkNotNull(recorded)
     }
@@ -185,5 +198,8 @@ class PaymentService(
         val METHODS = setOf("CASH", "CHECK", "CARD", "TRANSFER", "OTHER")
 
         const val REFERENCE_PREFIX = "SIM"
+
+        const val ACTION_PAYMENT_RECORDED = "PATIENT_PAYMENT_RECORDED"
+        const val ENTITY_CLAIM = "Claim"
     }
 }

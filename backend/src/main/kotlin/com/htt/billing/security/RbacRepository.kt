@@ -106,4 +106,24 @@ class RbacRepository(private val jdbc: JdbcClient) {
         .sql("SELECT code FROM roles ORDER BY code")
         .query(String::class.java)
         .list()
+
+    /** One cell of the permission matrix: this role, at this scope, may do this. */
+    data class MatrixRow(val roleCode: String, val scopeType: String, val permission: String)
+
+    /**
+     * The whole matrix as seeded, so a test can hold the review that settled it.
+     * Grants only: a permission no role holds is a check that can never pass.
+     */
+    fun permissionMatrix(): List<MatrixRow> = jdbc
+        .sql(
+            """
+            SELECT r.code AS "roleCode", r.scope_type AS "scopeType", p.code AS "permission"
+            FROM role_permissions rp
+            JOIN roles r ON r.id = rp.role_id
+            JOIN permissions p ON p.id = rp.permission_id
+            ORDER BY r.code, p.code
+            """,
+        )
+        .query(MatrixRow::class.java)
+        .list()
 }
