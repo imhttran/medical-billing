@@ -106,29 +106,22 @@ class CoverageApiTest : BillingApiTest() {
         assertTrue(codes.contains("SYN001")) { "seeded payers missing: ${payers.text}" }
     }
 
-    private fun createCoverage(token: String, patientId: Int): Int {
-        val created = env.doJson("POST", createPath(patientId), token, coverageBody())
-        assertStatus(201, created)
-        return created.body.path("coverage").path("id").asInt()
-    }
+    private fun createCoverage(token: String, patientId: Int): Int =
+        created(createPath(patientId), token, coverageBody(), "coverage")
 
     private fun createPath(patientId: Int): String = "/api/patients/$patientId/coverages"
 
-    private fun createPatient(token: String, organizationId: Int): Int {
-        val created = env.doJson(
-            "POST",
-            "/api/patients",
-            token,
-            mapOf(
-                "organizationId" to organizationId,
-                "firstName" to "Jane",
-                "lastName" to "Smith",
-                "dateOfBirth" to "1980-04-12",
-            ),
-        )
-        assertStatus(201, created)
-        return created.body.path("patient").path("id").asInt()
-    }
+    private fun createPatient(token: String, organizationId: Int): Int = created(
+        "/api/patients",
+        token,
+        mapOf(
+            "organizationId" to organizationId,
+            "firstName" to "Jane",
+            "lastName" to "Smith",
+            "dateOfBirth" to "1980-04-12",
+        ),
+        "patient",
+    )
 
     private fun coverageBody(): Map<String, Any?> = mapOf(
         "payerId" to payerId(),

@@ -218,25 +218,21 @@ class PaymentApiTest : BillingApiTest() {
         return id
     }
 
-    private fun createClaim(): Int {
-        val created = env.doJson(
-            "POST",
-            "/api/claims",
-            collector.token,
-            mapOf(
-                "patientId" to patientId,
-                "providerId" to providerId,
-                "coverageId" to coverageId,
-                "serviceDate" to SERVICE_DATE,
-                "diagnoses" to listOf("J06.9"),
-                "lines" to listOf(
-                    mapOf("procedureCode" to "99213", "quantity" to 1, "chargeAmount" to "150.00"),
-                ),
+    private fun createClaim(): Int = created(
+        "/api/claims",
+        collector.token,
+        mapOf(
+            "patientId" to patientId,
+            "providerId" to providerId,
+            "coverageId" to coverageId,
+            "serviceDate" to SERVICE_DATE,
+            "diagnoses" to listOf("J06.9"),
+            "lines" to listOf(
+                mapOf("procedureCode" to "99213", "quantity" to 1, "chargeAmount" to "150.00"),
             ),
-        )
-        assertStatus(201, created)
-        return created.body.path("claim").path("id").asInt()
-    }
+        ),
+        "claim",
+    )
 
     /** The rows a claim needs, written straight to the store. */
     private val patientId: Int by lazy {

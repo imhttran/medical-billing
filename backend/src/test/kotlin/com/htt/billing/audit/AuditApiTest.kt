@@ -165,64 +165,47 @@ class AuditApiTest : BillingApiTest() {
         return env.doJson("GET", "/api/audit-events$suffix", session.token, null)
     }
 
-    private fun createPatient(session: BillingApiTest.Session): Int {
-        val created = env.doJson(
-            "POST",
-            "/api/patients",
-            session.token,
-            mapOf("firstName" to "Jane", "lastName" to "Smith", "dateOfBirth" to "1979-03-14"),
-        )
-        assertStatus(201, created)
-        return created.body.path("patient").path("id").asInt()
-    }
+    private fun createPatient(session: BillingApiTest.Session): Int = created(
+        "/api/patients",
+        session.token,
+        mapOf("firstName" to "Jane", "lastName" to "Smith", "dateOfBirth" to "1979-03-14"),
+        "patient",
+    )
 
-    private fun createProvider(session: BillingApiTest.Session): Int {
-        val created = env.doJson(
-            "POST",
-            "/api/providers",
-            session.token,
-            mapOf("firstName" to "Dana", "lastName" to "Reyes", "npi" to "1245319599"),
-        )
-        assertStatus(201, created)
-        return created.body.path("provider").path("id").asInt()
-    }
+    private fun createProvider(session: BillingApiTest.Session): Int = created(
+        "/api/providers",
+        session.token,
+        mapOf("firstName" to "Dana", "lastName" to "Reyes", "npi" to "1245319599"),
+        "provider",
+    )
 
-    private fun createCoverage(session: BillingApiTest.Session, patientId: Int): Int {
-        val created = env.doJson(
-            "POST",
-            "/api/patients/$patientId/coverages",
-            session.token,
-            mapOf(
-                "payerId" to payerId(),
-                "memberId" to "T1M3L1N3",
-                "groupNumber" to "GRP-77",
-                "subscriberName" to "Jane Smith",
-                "relationshipToSubscriber" to "SELF",
-                "effectiveDate" to "2024-01-01",
-                "terminationDate" to null,
-                "priority" to 1,
-            ),
-        )
-        assertStatus(201, created)
-        return created.body.path("coverage").path("id").asInt()
-    }
+    private fun createCoverage(session: BillingApiTest.Session, patientId: Int): Int = created(
+        "/api/patients/$patientId/coverages",
+        session.token,
+        mapOf(
+            "payerId" to payerId(),
+            "memberId" to "T1M3L1N3",
+            "groupNumber" to "GRP-77",
+            "subscriberName" to "Jane Smith",
+            "relationshipToSubscriber" to "SELF",
+            "effectiveDate" to "2024-01-01",
+            "terminationDate" to null,
+            "priority" to 1,
+        ),
+        "coverage",
+    )
 
-    private fun createClaim(session: BillingApiTest.Session, patientId: Int, providerId: Int, coverageId: Int): Int {
-        val created = env.doJson(
-            "POST",
-            "/api/claims",
-            session.token,
-            mapOf(
-                "patientId" to patientId,
-                "providerId" to providerId,
-                "coverageId" to coverageId,
-                "serviceDate" to "2026-03-02",
-                "diagnoses" to listOf("J06.9"),
-                "lines" to listOf(mapOf("procedureCode" to "99213", "quantity" to 1, "chargeAmount" to "150.00")),
-            ),
-        )
-        assertStatus(201, created)
-        return created.body.path("claim").path("id").asInt()
-    }
-
+    private fun createClaim(session: BillingApiTest.Session, patientId: Int, providerId: Int, coverageId: Int): Int = created(
+        "/api/claims",
+        session.token,
+        mapOf(
+            "patientId" to patientId,
+            "providerId" to providerId,
+            "coverageId" to coverageId,
+            "serviceDate" to "2026-03-02",
+            "diagnoses" to listOf("J06.9"),
+            "lines" to listOf(mapOf("procedureCode" to "99213", "quantity" to 1, "chargeAmount" to "150.00")),
+        ),
+        "claim",
+    )
 }

@@ -152,16 +152,12 @@ class PatientApiTest : BillingApiTest() {
         firstName: String = "Jane",
         lastName: String = "Smith",
         dateOfBirth: String = "1980-04-12",
-    ): Int {
-        val created = env.doJson(
-            "POST",
-            "/api/patients",
-            token,
-            patientBody(organizationId, firstName, lastName, dateOfBirth),
-        )
-        assertStatus(201, created)
-        return created.body.path("patient").path("id").asInt()
-    }
+    ): Int = created(
+        "/api/patients",
+        token,
+        patientBody(organizationId, firstName, lastName, dateOfBirth),
+        "patient",
+    )
 
     private fun patientBody(
         organizationId: Int,

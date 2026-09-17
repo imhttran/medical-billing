@@ -1,5 +1,3 @@
-import { validatePassword } from "./validators";
-
 // Same-origin by default: the frontend's own server proxies /api/* to the
 // backend API (see next.config.ts), so the browser never talks to the API directly.
 // NEXT_PUBLIC_API_URL overrides this for a split-domain deployment that calls
@@ -23,19 +21,17 @@ export function renewSessionFrom(response: Response): void {
   if (renewed) localStorage.setItem("auth_token", renewed);
 }
 
-// Shared by signup and reset-password: alerts and returns false on the first
-// broken rule (mismatch, then strength), true if the password is good to submit.
+/**
+ * The one password rule the server cannot check, because the confirmation is
+ * never sent. Strength is the server's to report, and it answers with the same
+ * wording this used to, so there is nothing to keep in step here.
+ */
 export function confirmedPasswordOrAlert(
   password: string,
   confirmPassword: string,
 ): boolean {
   if (password !== confirmPassword) {
     alert("Passwords do not match");
-    return false;
-  }
-  const passwordError = validatePassword(password);
-  if (passwordError) {
-    alert(passwordError);
     return false;
   }
   return true;
@@ -158,8 +154,10 @@ export function getJson<T extends ApiResult = ApiResult>(
 }
 
 // Shared by every authenticated self-service form (change-password, profile):
-// bounces to login if there's no stored session, POSTs via callApi, and
-// sends the user to the dashboard on success.
+// bounces to login if there's no stored session, POSTs the body, and sends the
+// user to the dashboard on success. A refusal is reported here rather than in the
+// page, because these two forms have nowhere to put it — without this the server's
+// reason for refusing a change would only reach the console.
 export async function submitAuthedForm(
   path: string,
   body: object,
@@ -169,6 +167,10 @@ export async function submitAuthedForm(
     window.location.href = "/";
     return;
   }
-  const result = await callApi(token, path, "POST", body);
-  if (result) window.location.href = "/dashboard";
+  const { ok, data } = await submitJson(token, path, "POST", body);
+  if (!ok) {
+    alert(`Error: ${data.message}`);
+    return;
+  }
+  window.location.href = "/dashboard";
 }

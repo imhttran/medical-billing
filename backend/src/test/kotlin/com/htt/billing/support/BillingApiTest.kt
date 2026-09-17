@@ -102,6 +102,23 @@ abstract class BillingApiTest : IntegrationTest() {
         .single()
 
     /**
+     * A POST that has to come back 201 with the row it created, which is what every
+     * fixture builder in the suite does. [resource] is the key the response wraps
+     * it in, so a response that lost its row fails here rather than three lines
+     * later in whichever assertion noticed.
+     */
+    protected fun created(
+        path: String,
+        token: String,
+        body: Map<String, Any?>,
+        resource: String,
+    ): Int {
+        val response = env.doJson("POST", path, token, body)
+        assertStatus(201, response)
+        return response.body.path(resource).path("id").asInt()
+    }
+
+    /**
      * A signed-in user holding [roleCode] at [organizationId] (null for a
      * platform-scoped role).
      */

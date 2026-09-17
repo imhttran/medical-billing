@@ -393,11 +393,7 @@ class ClaimApiTest : BillingApiTest() {
         token: String,
         data: Practice,
         body: Map<String, Any?> = claimBody(data),
-    ): Int {
-        val created = env.doJson("POST", "/api/claims", token, body)
-        assertStatus(201, created)
-        return created.body.path("claim").path("id").asInt()
-    }
+    ): Int = created("/api/claims", token, body, "claim")
 
     private fun claimBody(
         data: Practice,

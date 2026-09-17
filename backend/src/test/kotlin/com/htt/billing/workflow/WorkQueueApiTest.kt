@@ -279,16 +279,12 @@ class WorkQueueApiTest : BillingApiTest() {
         return id
     }
 
-    private fun createClaim(serviceDate: String): Int {
-        val created = env.doJson(
-            "POST",
-            "/api/claims",
-            fixer.token,
-            claimBody(serviceDate, lines = listOf(COVERED_LINE)),
-        )
-        assertStatus(201, created)
-        return created.body.path("claim").path("id").asInt()
-    }
+    private fun createClaim(serviceDate: String): Int = created(
+        "/api/claims",
+        fixer.token,
+        claimBody(serviceDate, lines = listOf(COVERED_LINE)),
+        "claim",
+    )
 
     private fun claimBody(
         serviceDate: String,

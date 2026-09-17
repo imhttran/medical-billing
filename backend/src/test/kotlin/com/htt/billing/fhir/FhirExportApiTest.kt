@@ -215,25 +215,21 @@ class FhirExportApiTest : BillingApiTest() {
         return claimId
     }
 
-    private fun createClaim(serviceDate: String = "2026-03-02"): Int {
-        val created = env.doJson(
-            "POST",
-            "/api/claims",
-            exporter.token,
-            mapOf(
-                "patientId" to patientId,
-                "providerId" to providerId,
-                "coverageId" to coverageId,
-                "serviceDate" to serviceDate,
-                "diagnoses" to listOf("J06.9"),
-                "lines" to listOf(
-                    mapOf("procedureCode" to "99213", "quantity" to 1, "chargeAmount" to "150.00"),
-                ),
+    private fun createClaim(serviceDate: String = "2026-03-02"): Int = created(
+        "/api/claims",
+        exporter.token,
+        mapOf(
+            "patientId" to patientId,
+            "providerId" to providerId,
+            "coverageId" to coverageId,
+            "serviceDate" to serviceDate,
+            "diagnoses" to listOf("J06.9"),
+            "lines" to listOf(
+                mapOf("procedureCode" to "99213", "quantity" to 1, "chargeAmount" to "150.00"),
             ),
-        )
-        assertStatus(201, created)
-        return created.body.path("claim").path("id").asInt()
-    }
+        ),
+        "claim",
+    )
 
     /** PRACTICE_ADMIN holds FHIR_EXPORT, CLAIM_CREATE and CLAIM_SUBMIT. */
     private val exporter by lazy { signIn(RoleCodes.PRACTICE_ADMIN, practiceA.id) }
