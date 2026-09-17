@@ -8,7 +8,7 @@ import {
   type MouseEvent,
 } from "react";
 import { useParams } from "next/navigation";
-import { API_BASE, renewSessionFrom, submitJson } from "@/lib/api";
+import { submitJson } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -93,24 +93,6 @@ const PAYMENT_METHODS = ["CASH", "CHECK", "CARD", "TRANSFER", "OTHER"];
 /** Today, as the date input wants it. */
 const today = () => new Date().toISOString().slice(0, 10);
 
-/**
- * A GET with the session token, or null when the answer is not a success. The
- * payments are the reason: a role without PAYMENT_VIEW may see the claim and not
- * its money, and that leaves the section off the page rather than erroring.
- */
-async function getJson<T>(authToken: string, path: string): Promise<T | null> {
-  try {
-    const response = await fetch(`${API_BASE}${path}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
-    });
-    renewSessionFrom(response);
-    if (!response.ok) return null;
-    return (await response.json()) as T;
-  } catch {
-    return null;
-  }
-}
-
 export default function ClaimDetailPage() {
   const params = useParams<{ id: string }>();
   const claimId = String(params.id);
@@ -130,34 +112,39 @@ export default function ClaimDetailPage() {
    */
   const loadPayments = useCallback(
     async (authToken: string) => {
-      const money = await getJson<{ payments: Payments }>(
+      const { ok, data } = await submitJson<{ payments: Payments }>(
         authToken,
         `/api/claims/${claimId}/payments`,
+        "GET",
       );
-      setPayments(money?.payments ?? null);
+      // A role without PAYMENT_VIEW may see the claim and not its money, which
+      // leaves the section off the page rather than erroring.
+      setPayments(ok ? data.payments : null);
     },
     [claimId],
   );
 
   const load = useCallback(
     async (authToken: string) => {
-      const data = await getJson<ClaimDetail>(
+      const claim = await submitJson<ClaimDetail>(
         authToken,
         `/api/claims/${claimId}`,
+        "GET",
       );
-      if (!data) {
+      if (!claim.ok) {
         setFailed(true);
         return;
       }
-      setDetail(data);
+      setDetail(claim.data);
       setFailed(false);
 
       // The patient's coverages, so a claim can be corrected onto the right one.
-      const listed = await getJson<{ coverages: Coverage[] }>(
+      const listed = await submitJson<{ coverages: Coverage[] }>(
         authToken,
-        `/api/patients/${data.claim.patientId}/coverages`,
+        `/api/patients/${claim.data.claim.patientId}/coverages`,
+        "GET",
       );
-      setCoverages(listed?.coverages ?? []);
+      setCoverages(listed.ok ? listed.data.coverages : []);
 
       await loadPayments(authToken);
     },

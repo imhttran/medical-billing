@@ -8,7 +8,7 @@ import {
   type FormEvent,
   type MouseEvent,
 } from "react";
-import { API_BASE, renewSessionFrom, submitJson } from "@/lib/api";
+import { submitJson } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -37,21 +37,16 @@ export default function PatientsPage() {
   const addSectionRef = useRef<HTMLDetailsElement>(null);
 
   const load = useCallback(async (authToken: string, forSearch: string) => {
-    try {
-      const path = forSearch
-        ? `/api/patients?query=${encodeURIComponent(forSearch)}`
-        : "/api/patients";
-      const response = await fetch(`${API_BASE}${path}`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      renewSessionFrom(response);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
-      setPatients(data.patients);
-      setFailed(false);
-    } catch {
-      setFailed(true);
-    }
+    const path = forSearch
+      ? `/api/patients?query=${encodeURIComponent(forSearch)}`
+      : "/api/patients";
+    const { ok, data } = await submitJson<{ patients: Patient[] }>(
+      authToken,
+      path,
+      "GET",
+    );
+    if (ok) setPatients(data.patients);
+    setFailed(!ok);
   }, []);
 
   useEffect(() => {

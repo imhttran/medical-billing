@@ -8,6 +8,12 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 type ApiResult = { message?: string; [key: string]: unknown };
 
+/** The one wording a request that never reached the API reports. */
+const UNREACHABLE = "Connection error. Is the backend running?";
+
+/** A parsed answer, and whether the API answered at all rather than the network failing. */
+type ApiOutcome<T> = { ok: boolean; data: T; unreachable?: boolean };
+
 // Sliding sessions: every successful authed response may carry a fresh JWT
 // (X-Renewed-Token) once the current one is past half its 10-minute life —
 // persist it so active users never hit the hard expiry. Idle users do, and
@@ -97,37 +103,28 @@ export async function callApi<T extends ApiResult = ApiResult>(
   body?: unknown,
   notify = true,
 ): Promise<T | false> {
-  try {
-    const response = await fetch(`${API_BASE}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(body ? { "Content-Type": "application/json" } : {}),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-    const result = (await response.json()) as T;
-    renewSessionFrom(response);
-    if (notify) console.log(`[api] ${result.message}`);
-    return response.ok ? result : false;
-  } catch {
-    if (notify) alert("Connection error. Is the backend running?");
-    return false;
-  }
+  const outcome = await submitJson<T>(token, path, method, body);
+  if (notify) console.log(`[api] ${outcome.data.message}`);
+  // A refusal is the server's answer and the caller renders it; a request that
+  // never arrived is the one worth interrupting for.
+  if (notify && outcome.unreachable) alert(UNREACHABLE);
+  return outcome.ok ? outcome.data : false;
 }
 
 /**
- * A form's mutation. `callApi` logs the failure message because it is used by
- * action buttons, but a form has to show the reason — a rejected field, or a
- * permission the user does not hold — so this hands back the parsed body and the
- * ok flag and leaves the wording to the caller.
+ * A form's mutation, and the one place an authenticated request is built.
+ * `callApi` logs the failure message because it is used by action buttons, but a
+ * form has to show the reason — a rejected field, or a permission the user does
+ * not hold — so this hands back the parsed body and the ok flag and leaves the
+ * wording to the caller. An answer that never arrived is marked, so a caller can
+ * tell a refusal from a dead API.
  */
 export async function submitJson<T extends ApiResult = ApiResult>(
   token: string,
   path: string,
   method: string,
   body?: unknown,
-): Promise<{ ok: boolean; data: T }> {
+): Promise<ApiOutcome<T>> {
   try {
     const response = await fetch(`${API_BASE}${path}`, {
       method,
@@ -143,7 +140,8 @@ export async function submitJson<T extends ApiResult = ApiResult>(
   } catch {
     return {
       ok: false,
-      data: { message: "Connection error. Is the backend running?" } as T,
+      data: { message: UNREACHABLE } as T,
+      unreachable: true,
     };
   }
 }

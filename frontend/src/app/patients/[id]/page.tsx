@@ -8,7 +8,7 @@ import {
   type MouseEvent,
 } from "react";
 import { useParams } from "next/navigation";
-import { API_BASE, renewSessionFrom, submitJson } from "@/lib/api";
+import { submitJson } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -85,44 +85,38 @@ export default function PatientDetailPage() {
 
   const load = useCallback(
     async (authToken: string) => {
-      try {
-        const headers = { Authorization: `Bearer ${authToken}` };
-        const [
-          patientResponse,
-          coverageResponse,
-          payerResponse,
-          balanceResponse,
-        ] = await Promise.all([
-          fetch(`${API_BASE}/api/patients/${patientId}`, { headers }),
-          fetch(`${API_BASE}/api/patients/${patientId}/coverages`, {
-            headers,
-          }),
-          fetch(`${API_BASE}/api/payers`, { headers }),
-          fetch(`${API_BASE}/api/patients/${patientId}/balance`, { headers }),
+      const [patientResult, coverageResult, payerResult, balanceResult] =
+        await Promise.all([
+          submitJson<{ patient: Patient }>(
+            authToken,
+            `/api/patients/${patientId}`,
+            "GET",
+          ),
+          submitJson<{ coverages: Coverage[] }>(
+            authToken,
+            `/api/patients/${patientId}/coverages`,
+            "GET",
+          ),
+          submitJson<{ payers: Payer[] }>(authToken, "/api/payers", "GET"),
+          submitJson<{ balance: Balance }>(
+            authToken,
+            `/api/patients/${patientId}/balance`,
+            "GET",
+          ),
         ]);
-        [
-          patientResponse,
-          coverageResponse,
-          payerResponse,
-          balanceResponse,
-        ].forEach(renewSessionFrom);
 
-        const patientData = await patientResponse.json();
-        if (!patientResponse.ok) throw new Error(patientData.message);
-        setPatient(patientData.patient);
-
-        // Coverage, payers and the balance are secondary: a user who may read the
-        // patient but not their coverage should still see the details.
-        const coverageData = await coverageResponse.json();
-        setCoverages(coverageResponse.ok ? coverageData.coverages : []);
-        const payerData = await payerResponse.json();
-        setPayers(payerResponse.ok ? payerData.payers : []);
-        const balanceData = await balanceResponse.json();
-        setBalance(balanceResponse.ok ? balanceData.balance : null);
-        setFailed(false);
-      } catch {
+      if (!patientResult.ok) {
         setFailed(true);
+        return;
       }
+      setPatient(patientResult.data.patient);
+
+      // Coverage, payers and the balance are secondary: a user who may read the
+      // patient but not their coverage should still see the details.
+      setCoverages(coverageResult.ok ? coverageResult.data.coverages : []);
+      setPayers(payerResult.ok ? payerResult.data.payers : []);
+      setBalance(balanceResult.ok ? balanceResult.data.balance : null);
+      setFailed(false);
     },
     [patientId],
   );

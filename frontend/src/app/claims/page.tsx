@@ -9,7 +9,7 @@ import {
   type MouseEvent,
 } from "react";
 import { useRouter } from "next/navigation";
-import { API_BASE, renewSessionFrom, submitJson } from "@/lib/api";
+import { submitJson } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -60,47 +60,41 @@ export default function ClaimsPage() {
   const addSectionRef = useRef<HTMLDetailsElement>(null);
 
   const load = useCallback(async (authToken: string) => {
-    try {
-      const headers = { Authorization: `Bearer ${authToken}` };
-      const [
-        claimsResponse,
-        patientResponse,
-        providerResponse,
-        diagnosisResponse,
-        procedureResponse,
-      ] = await Promise.all([
-        fetch(`${API_BASE}/api/claims`, { headers }),
-        fetch(`${API_BASE}/api/patients`, { headers }),
-        fetch(`${API_BASE}/api/providers`, { headers }),
-        fetch(`${API_BASE}/api/codes/diagnoses?limit=100`, { headers }),
-        fetch(`${API_BASE}/api/codes/procedures?limit=100`, { headers }),
-      ]);
-      [
-        claimsResponse,
-        patientResponse,
-        providerResponse,
-        diagnosisResponse,
-        procedureResponse,
-      ].forEach(renewSessionFrom);
+    const [
+      claimResult,
+      patientResult,
+      providerResult,
+      diagnosisResult,
+      procedureResult,
+    ] = await Promise.all([
+      submitJson<{ claims: ClaimSummary[] }>(authToken, "/api/claims", "GET"),
+      submitJson<{ patients: Patient[] }>(authToken, "/api/patients", "GET"),
+      submitJson<{ providers: Provider[] }>(authToken, "/api/providers", "GET"),
+      submitJson<{ diagnoses: Code[] }>(
+        authToken,
+        "/api/codes/diagnoses?limit=100",
+        "GET",
+      ),
+      submitJson<{ procedures: Code[] }>(
+        authToken,
+        "/api/codes/procedures?limit=100",
+        "GET",
+      ),
+    ]);
 
-      const claimData = await claimsResponse.json();
-      if (!claimsResponse.ok) throw new Error(claimData.message);
-      setClaims(claimData.claims);
-
-      // The rest are only needed by the form; an empty picker is better than a
-      // failed page if one of them is refused.
-      const patientData = await patientResponse.json();
-      setPatients(patientResponse.ok ? patientData.patients : []);
-      const providerData = await providerResponse.json();
-      setProviders(providerResponse.ok ? providerData.providers : []);
-      const diagnosisData = await diagnosisResponse.json();
-      setDiagnoses(diagnosisResponse.ok ? diagnosisData.diagnoses : []);
-      const procedureData = await procedureResponse.json();
-      setProcedures(procedureResponse.ok ? procedureData.procedures : []);
-      setFailed(false);
-    } catch {
+    if (!claimResult.ok) {
       setFailed(true);
+      return;
     }
+    setClaims(claimResult.data.claims);
+
+    // The rest are only needed by the form; an empty picker is better than a
+    // failed page if one of them is refused.
+    setPatients(patientResult.ok ? patientResult.data.patients : []);
+    setProviders(providerResult.ok ? providerResult.data.providers : []);
+    setDiagnoses(diagnosisResult.ok ? diagnosisResult.data.diagnoses : []);
+    setProcedures(procedureResult.ok ? procedureResult.data.procedures : []);
+    setFailed(false);
   }, []);
 
   useEffect(() => {
@@ -113,17 +107,12 @@ export default function ClaimsPage() {
     setCoverages([]);
     if (!patientId) return;
     withToken(async (authToken) => {
-      const response = await fetch(
-        `${API_BASE}/api/patients/${patientId}/coverages`,
-        {
-          headers: { Authorization: `Bearer ${authToken}` },
-        },
+      const { ok, data } = await submitJson<{ coverages: Coverage[] }>(
+        authToken,
+        `/api/patients/${patientId}/coverages`,
+        "GET",
       );
-      renewSessionFrom(response);
-      const data = await response.json();
-      setCoverages(
-        response.ok ? data.coverages.filter((c: Coverage) => c.active) : [],
-      );
+      setCoverages(ok ? data.coverages.filter((c) => c.active) : []);
     });
   };
 

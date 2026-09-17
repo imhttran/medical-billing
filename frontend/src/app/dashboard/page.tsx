@@ -10,7 +10,7 @@ import {
   type MouseEvent,
   type ReactEventHandler,
 } from "react";
-import { API_BASE, callApi, renewSessionFrom } from "@/lib/api";
+import { callApi, submitJson } from "@/lib/api";
 import { ROLES, hasRole } from "@/lib/roles";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -146,19 +146,17 @@ export default function DashboardPage() {
   const isStaff = me ? hasRole(me.role, "staff") : false;
 
   const loadUsers = useCallback(async (authToken: string) => {
-    try {
-      const response = await fetch(`${API_BASE}/api/users`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      renewSessionFrom(response);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
-      if (!data.users) throw new Error("No users in response");
-      setUsers(data.users);
-      setUsersFailed(false);
-    } catch {
+    const { ok, data } = await submitJson<{ users?: UserRow[] }>(
+      authToken,
+      "/api/users",
+      "GET",
+    );
+    if (!ok || !data.users) {
       setUsersFailed(true);
+      return;
     }
+    setUsers(data.users);
+    setUsersFailed(false);
   }, []);
 
   useEffect(() => {

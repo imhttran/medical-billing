@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
-import { API_BASE, renewSessionFrom } from "@/lib/api";
+import { submitJson } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -69,21 +69,15 @@ export default function AuditPage() {
 
   const load = useCallback(
     async (authToken: string) => {
-      try {
-        const query = new URLSearchParams({ limit });
-        if (action) query.set("action", action);
-        const response = await fetch(
-          `${API_BASE}/api/audit-events?${query.toString()}`,
-          { headers: { Authorization: `Bearer ${authToken}` } },
-        );
-        renewSessionFrom(response);
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.message);
-        setEvents(body.auditEvents);
-        setFailed(false);
-      } catch {
-        setFailed(true);
-      }
+      const query = new URLSearchParams({ limit });
+      if (action) query.set("action", action);
+      const { ok, data } = await submitJson<{ auditEvents: AuditEvent[] }>(
+        authToken,
+        `/api/audit-events?${query.toString()}`,
+        "GET",
+      );
+      if (ok) setEvents(data.auditEvents);
+      setFailed(!ok);
     },
     [action, limit],
   );

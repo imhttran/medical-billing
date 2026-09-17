@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
-import { API_BASE, renewSessionFrom, submitJson } from "@/lib/api";
+import { submitJson } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -44,19 +44,13 @@ export default function WorkQueuePage() {
 
   const load = useCallback(
     async (authToken: string) => {
-      try {
-        const response = await fetch(
-          `${API_BASE}/api/work-items?status=${status}`,
-          { headers: { Authorization: `Bearer ${authToken}` } },
-        );
-        renewSessionFrom(response);
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.message);
-        setItems(body.workItems);
-        setFailed(false);
-      } catch {
-        setFailed(true);
-      }
+      const { ok, data } = await submitJson<{ workItems: WorkItem[] }>(
+        authToken,
+        `/api/work-items?status=${status}`,
+        "GET",
+      );
+      if (ok) setItems(data.workItems);
+      setFailed(!ok);
     },
     [status],
   );
