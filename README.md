@@ -91,9 +91,12 @@ three items waiting on the work queue and every submission in the audit trail.
 ## Tests
 
 `make test` (or `./manage.sh test`) runs the backend tests
-(`./gradlew test`) plus the frontend build. The DB-backed integration tests need
-`TEST_DATABASE_URL` and skip without it; everything else runs regardless. The
-counts are deliberately not written down here — they went stale every time a
+(`./gradlew test`) plus the frontend typecheck (`tsc --noEmit`). It stops at the
+typecheck rather than running `next build`, because a production bundle written
+into `frontend/.next` pulls the rug from under a running `next dev`. Use
+`make build` when you actually want the bundle. The DB-backed integration tests
+need `TEST_DATABASE_URL` and skip without it; everything else runs regardless.
+The counts are deliberately not written down here — they went stale every time a
 slice added tests. See **[docs/DATABASE.md](docs/DATABASE.md)** for the test
 database.
 

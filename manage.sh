@@ -193,8 +193,8 @@ first_time_setup() {
   echo -e "${GREEN}Setup complete. Start everything with ./manage.sh up.${NC}"
 }
 
-# Backend tests (./gradlew test) + frontend build. The DB-backed integration
-# tests need TEST_DATABASE_URL, taken from the environment or from .env / .env.dev;
+# Backend tests (./gradlew test). The DB-backed integration tests need
+# TEST_DATABASE_URL, taken from the environment or from .env / .env.dev;
 # without it they skip and the unit tests still run.
 run_tests() {
   local url="${TEST_DATABASE_URL:-}"
@@ -208,12 +208,15 @@ run_tests() {
   fi
 }
 
-# What `./manage.sh test` runs: the backend suite, then the frontend build
-# (which typechecks it as a side effect).
+# What `./manage.sh test` runs: the backend suite, then a frontend typecheck.
+# The typecheck is tsc, deliberately not `next build`. A production bundle
+# written into frontend/.next clobbers a running `next dev`, which then serves
+# production chunks into dev-rendered HTML and every page dies on the hydration
+# mismatch. Producing that bundle is what `build` is for.
 run_checks() {
   run_tests || return 1
   require_frontend_deps || return 1
-  (cd "$ROOT_DIR/frontend" && npm run build)
+  (cd "$ROOT_DIR/frontend" && npm run typecheck)
 }
 
 # The artifact build: the boot jar the Dockerfile copies, plus the frontend's
@@ -336,7 +339,7 @@ Native — needs Java 21, Node 20+ and a running PostgreSQL
 
 Work
   setup                             first-time dependency install
-  test                              backend tests + frontend build
+  test                              backend tests + frontend typecheck
   build                             API jar + frontend production bundle
   fmt                               prettier --write
   db:reset [--yes]                  drop and recreate the schema
