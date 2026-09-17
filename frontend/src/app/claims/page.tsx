@@ -179,6 +179,7 @@ export default function ClaimsPage() {
           )
         }
         current="/claims"
+        permissions={me?.permissions}
       >
         <a className="logout-link" href="/" onClick={logout}>
           Logout

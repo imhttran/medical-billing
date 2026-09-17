@@ -95,6 +95,7 @@ export default function WorkQueuePage() {
         title="Work queue"
         subtitle="What the payers' answers left for someone to do"
         current="/work-queue"
+        permissions={me?.permissions}
       >
         <a className="logout-link" href="/" onClick={logout}>
           Logout

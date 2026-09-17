@@ -223,6 +223,7 @@ export default function PatientDetailPage() {
         }
         subtitle={patient ? `Born ${patient.dateOfBirth}` : "Loading…"}
         current="/patients"
+        permissions={me?.permissions}
       >
         <a className="logout-link" href="/" onClick={logout}>
           Logout

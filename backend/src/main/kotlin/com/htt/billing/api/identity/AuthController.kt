@@ -5,6 +5,7 @@ import com.htt.billing.identity.AuthUser
 import com.htt.billing.identity.EmailTemplates.Email
 import com.htt.billing.repository.identity.LoginCodeRepository.Code
 import com.htt.billing.service.identity.AuthService
+import com.htt.billing.service.security.AuthorizationService
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
@@ -20,7 +21,10 @@ import org.springframework.web.bind.annotation.RestController
  */
 @RestController
 @RequestMapping("/api")
-class AuthController(private val auth: AuthService) {
+class AuthController(
+    private val auth: AuthService,
+    private val authorization: AuthorizationService,
+) {
 
     @PostMapping("/signup")
     fun signup(@RequestBody(required = false) body: ByteArray?): ResponseEntity<Any> {
@@ -108,6 +112,13 @@ class AuthController(private val auth: AuthService) {
         return Api.respond(HttpStatus.OK, Api.msg("Code resent"))
     }
 
+    /**
+     * The permission codes are a hint for the browser, not an authorization
+     * decision — every route still checks its own grants. The nav uses them to stop
+     * offering a page the caller holds nothing to fill: the list endpoints scope
+     * rows by billing permission and answer an empty list rather than a refusal, so
+     * an ungated link opens on an empty table with nothing explaining why.
+     */
     @GetMapping("/me")
     fun me(user: AuthUser): ResponseEntity<Any> = Api.respond(
         HttpStatus.OK,
@@ -120,6 +131,10 @@ class AuthController(private val auth: AuthService) {
                 "emailVerified" to user.emailVerified,
                 "mustChangePassword" to user.mustChangePassword,
                 "hasProfile" to user.hasProfile,
+                "permissions" to authorization.grantsFor(user.id)
+                    .map { it.permission }
+                    .distinct()
+                    .sorted(),
             ),
         ),
     )

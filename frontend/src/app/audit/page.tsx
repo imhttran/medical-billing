@@ -56,8 +56,8 @@ const details = (metadata: Record<string, unknown>) => {
  * a trail someone can edit is not evidence of anything.
  *
  * The list is whatever the caller's grants cover, so a role without AUDIT_VIEW
- * sees an empty table rather than an explanation — reads are scoped by billing
- * permission, which the UI cannot see, so it cannot explain the absence.
+ * gets an empty table rather than an explanation. The nav no longer offers this
+ * page to them, but a typed URL still lands on one.
  */
 export default function AuditPage() {
   const { me, withToken } = useSession();
@@ -99,6 +99,7 @@ export default function AuditPage() {
         title="Audit trail"
         subtitle="What was done in your practices, in the order it happened"
         current="/audit"
+        permissions={me?.permissions}
       >
         <a className="logout-link" href="/" onClick={logout}>
           Logout

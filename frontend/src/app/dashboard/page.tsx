@@ -27,6 +27,7 @@ type MeUser = {
   emailVerified: boolean;
   mustChangePassword?: boolean;
   hasProfile?: boolean;
+  permissions?: string[];
 };
 
 type UserRow = {
@@ -289,6 +290,7 @@ export default function DashboardPage() {
           </>
         }
         current="/dashboard"
+        permissions={me?.permissions}
       >
         <a className="logout-link" href="/" onClick={logout}>
           Logout

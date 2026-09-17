@@ -10,6 +10,8 @@ export type SessionUser = {
   emailVerified: boolean;
   mustChangePassword?: boolean;
   hasProfile?: boolean;
+  /** Billing permission codes, which the nav gates its destinations on. */
+  permissions?: string[];
 };
 
 /**

@@ -113,6 +113,7 @@ export default function PatientsPage() {
           )
         }
         current="/patients"
+        permissions={me?.permissions}
       >
         <a className="logout-link" href="/" onClick={logout}>
           Logout
