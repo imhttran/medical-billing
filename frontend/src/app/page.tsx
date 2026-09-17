@@ -154,7 +154,7 @@ export default function LoginPage() {
 
   return (
     <div className="login-container">
-      <PageTitle title="Login | Frontend Template" />
+      <PageTitle title="Login | Medical Billing" />
       <div className="login-logo">
         <Logo size={48} />
       </div>

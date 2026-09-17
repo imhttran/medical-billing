@@ -1,8 +1,8 @@
 package com.htt.billing.identity
 
 /**
- * The email bodies. The wording and the links are deliberately unchanged, so
- * recipients see exactly what this template has always sent.
+ * The email bodies. The wording and the links are deliberately unchanged — the
+ * tests pull the login code out of these bodies.
  */
 object EmailTemplates {
 
@@ -18,25 +18,25 @@ object EmailTemplates {
         to,
         "Verify your email address",
         "Hi,\n\nPlease verify your email address by visiting this link:\n\n" +
-            link +
-            "\n\nThanks,\nThe Team",
+                link +
+                "\n\nThanks,\nThe Team",
     )
 
     fun passwordReset(to: String, link: String): Email = Email(
         to,
         "Reset your password",
         "Hi,\n\nA password reset was requested for this account. Click the link below to choose a new" +
-            " password (expires in 1 hour):\n\n" +
-            link +
-            "\n\nIf you didn't request this, you can ignore this email.\n\nThanks,\nThe Team",
+                " password (expires in 1 hour):\n\n" +
+                link +
+                "\n\nIf you didn't request this, you can ignore this email.\n\nThanks,\nThe Team",
     )
 
     fun loginCode(to: String, code: String): Email = Email(
         to,
         "Your login code",
         "Hi,\n\nYour login verification code is:\n\n" +
-            code +
-            "\n\nIt expires in 10 minutes.\n\nThanks,\nThe Team",
+                code +
+                "\n\nIt expires in 10 minutes.\n\nThanks,\nThe Team",
     )
 
     /** Next.js client routes (no .html). */

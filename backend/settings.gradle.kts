@@ -1,1 +1,1 @@
-rootProject.name = "template-api"
+rootProject.name = "htt-billing-api"

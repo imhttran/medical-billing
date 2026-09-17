@@ -14,7 +14,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="login-container">
-      <PageTitle title="Forgot Password | Frontend Template" />
+      <PageTitle title="Forgot Password | Medical Billing" />
       <form className="login-form" onSubmit={handleSubmit}>
         <h1>Forgot Password</h1>
         <p>Enter your email and we&apos;ll send you a reset link</p>

@@ -18,7 +18,7 @@ export default function ResendVerificationPage() {
 
   return (
     <div className="login-container">
-      <PageTitle title="Resend Verification | Frontend Template" />
+      <PageTitle title="Resend Verification | Medical Billing" />
       <form className="login-form" onSubmit={handleSubmit}>
         <h1>Resend Verification</h1>
         <p>Enter your email and we&apos;ll send a new verification link</p>

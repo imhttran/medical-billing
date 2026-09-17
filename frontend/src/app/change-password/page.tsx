@@ -21,7 +21,7 @@ export default function ChangePasswordPage() {
 
   return (
     <div className="login-container">
-      <PageTitle title="Change Password | Frontend Template" />
+      <PageTitle title="Change Password | Medical Billing" />
       <form className="login-form" onSubmit={handleSubmit}>
         <h1>Change Password</h1>
         <p>Choose a new password</p>

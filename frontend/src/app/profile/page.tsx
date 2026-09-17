@@ -27,7 +27,7 @@ export default function ProfilePage() {
 
   return (
     <div className="login-container">
-      <PageTitle title="Complete Your Profile | Frontend Template" />
+      <PageTitle title="Complete Your Profile | Medical Billing" />
       <form className="login-form" onSubmit={handleSubmit}>
         <h1>Complete Your Profile</h1>
         <p>Tell us a bit about yourself before continuing</p>

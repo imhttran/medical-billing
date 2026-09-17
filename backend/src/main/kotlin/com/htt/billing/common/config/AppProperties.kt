@@ -77,7 +77,7 @@ class AppProperties(
         private const val DEFAULT_DATABASE_URL =
             "postgres://postgres:postgres@localhost:5432/htt-billing-db?sslmode=disable"
         private const val DEFAULT_FRONTEND_URL = "http://localhost:3000"
-        private const val DEFAULT_MAIL_FROM = "tom.tran@email.com"
+        private const val DEFAULT_MAIL_FROM = "billing@example.com"
         private const val DEFAULT_SMTP_PORT = 587
         private const val DEFAULT_MAX_ATTEMPTS = 3
     }

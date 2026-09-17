@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Single entry point for the template: start/stop/status, tests, setup,
+# Single entry point for the project: start/stop/status, tests, setup,
 # role management, database reset.
 # Backend: Spring Boot + PostgreSQL (backend/). Frontend: Next.js (frontend/).
 
@@ -23,7 +23,7 @@ BACKEND_START_TRIES=120
 FRONTEND_START_TRIES=20
 
 # Service logs land at $LOG_BASE-<dir>.log.
-LOG_BASE=/tmp/spring-template
+LOG_BASE=/tmp/htt-billing
 
 # ---- database ----
 
@@ -322,133 +322,11 @@ compose_logs() {
   fi
 }
 
-# ---- kubernetes (Rancher Desktop's cluster) ----
-
-K8S_NS=spring-template
-# The images compose builds. Rancher Desktop's k3s uses Docker's own daemon as
-# its container runtime (the node reports `docker://`), so its image store *is*
-# this one — no push, no load and no registry are involved. The manifests still
-# set imagePullPolicy: Never, because the images exist only locally.
-K8S_IMAGES="spring-template-api spring-template-frontend"
-
-require_k8s() {
-  if ! kubectl cluster-info >/dev/null 2>&1; then
-    echo -e "${RED}Kubernetes isn't reachable.${NC}"
-    echo "Enable it in Rancher Desktop: Preferences > Kubernetes > Enable Kubernetes."
-    return 1
-  fi
-}
-
-k8s_images_built() {
-  local img
-  for img in $K8S_IMAGES; do
-    docker image inspect "$img:latest" >/dev/null 2>&1 || return 1
-  done
-}
-
-# Rebuild from the Dockerfiles. `k8s:up` calls this too, but only when the
-# images don't exist at all.
-k8s_build() {
-  require_docker || return 1
-  (cd "$ROOT_DIR" && docker compose build)
-}
-
-# Rebuild after a code change. Both images keep the `latest` tag and the pods
-# never pull, so a rebuilt image is invisible to a pod that is already running:
-# the rollout restart is what actually moves them onto it.
-k8s_rebuild() {
-  require_k8s || return 1
-  k8s_build || return 1
-  kubectl -n "$K8S_NS" rollout restart deployment/api deployment/frontend || return 1
-  k8s_wait
-}
-
-k8s_wait() {
-  kubectl -n "$K8S_NS" rollout status statefulset/postgres --timeout=240s || return 1
-  kubectl -n "$K8S_NS" rollout status deployment/api --timeout=240s || return 1
-  kubectl -n "$K8S_NS" rollout status deployment/frontend --timeout=240s || return 1
-  kubectl -n "$K8S_NS" rollout status deployment/mailpit --timeout=120s
-}
-
-k8s_apply() {
-  # The namespace has to exist before anything can be created in it; kubectl
-  # applies a directory in filename order, so the 00- file wins the race.
-  (cd "$ROOT_DIR" && kubectl apply -f k8s/) || return 1
-}
-
-k8s_up() {
-  require_k8s || return 1
-  require_docker || return 1
-  if ! k8s_images_built; then
-    echo "→ the images aren't built yet"
-    k8s_build || return 1
-  fi
-  k8s_apply || return 1
-  k8s_wait || return 1
-  echo -e "${GREEN}UI: http://template.localhost    API: http://api.template.localhost${NC}"
-  echo "Mailpit and psql need a tunnel: ./manage.sh k8s:port-forward mailpit 8025 | ./manage.sh k8s:psql"
-}
-
-k8s_down() {
-  require_k8s || return 1
-  # Workloads and routing only. The namespace and Postgres's volume are kept, so
-  # the data is still there on the next `k8s:up`. `k8s:reset` is the one that
-  # discards it.
-  kubectl -n "$K8S_NS" delete deployment api frontend mailpit --ignore-not-found
-  kubectl -n "$K8S_NS" delete statefulset postgres --ignore-not-found
-  kubectl -n "$K8S_NS" delete service api frontend mailpit postgres --ignore-not-found
-  kubectl -n "$K8S_NS" delete ingress template --ignore-not-found
-  echo "Kubernetes workloads stopped (namespace and Postgres volume kept)."
-}
-
-k8s_status() {
-  require_k8s || return 1
-  kubectl -n "$K8S_NS" get pods,service,ingress 2>/dev/null \
-    || echo "Nothing deployed yet — ./manage.sh k8s:up"
-}
-
-k8s_logs() {
-  require_k8s || return 1
-  kubectl -n "$K8S_NS" logs -f "deployment/${1:-api}"
-}
-
-# Anything without an Ingress of its own (Mailpit, the API on :8080) is reached
-# through a tunnel: ./manage.sh k8s:port-forward mailpit 8025
-k8s_port_forward() {
-  require_k8s || return 1
-  local svc="${1:-}" port="${2:-}"
-  if [ -z "$svc" ] || [ -z "$port" ]; then
-    echo -e "${YELLOW}Usage: ./manage.sh k8s:port-forward <service> <port>${NC}"
-    echo "  e.g. mailpit 8025 (web UI), api 8080 (the API directly)"
-    return 2
-  fi
-  echo "Forwarding localhost:$port → $svc:$port (Ctrl-C to stop)"
-  kubectl -n "$K8S_NS" port-forward "service/$svc" "$port:$port"
-}
-
-k8s_psql() {
-  require_k8s || return 1
-  kubectl -n "$K8S_NS" exec -it statefulset/postgres -- psql -U postgres -d htt-billing-db
-}
-
-# The destructive one: the namespace owns the Postgres volume, so deleting it
-# throws the data away too.
-k8s_reset() {
-  require_k8s || return 1
-  echo -e "${RED}This deletes the '$K8S_NS' namespace: every pod, the Postgres volume and all data.${NC}"
-  if [ "${1:-}" != "--yes" ]; then
-    read -r -p "Type 'yes' to confirm: " confirm
-    if [ "$confirm" != "yes" ]; then echo "Aborted."; return 1; fi
-  fi
-  kubectl delete namespace "$K8S_NS" --ignore-not-found --wait=true || return 1
-  echo -e "${GREEN}Namespace deleted. ./manage.sh k8s:up recreates it empty.${NC}"
-}
-
 # ---- subcommands ----
 
 usage() {
   cat <<'USAGE'
-Spring Boot + Next.js template.
+Medical billing API (Kotlin + Spring Boot) and frontend (Next.js) on PostgreSQL.
 
   ./manage.sh                       this list
 
@@ -457,15 +335,6 @@ Docker — the primary path (no local JDK, Node or Postgres needed)
   compose:down                      stop it (the database volume is kept)
   compose:build                     rebuild the images after a code change
   compose:logs [service]            follow the stack, or one service
-
-Kubernetes — Rancher Desktop's cluster (needs Kubernetes enabled, and Docker up)
-  k8s:up                            deploy and wait for the rollout
-  k8s:rebuild                       rebuild the images and restart the pods onto them
-  k8s:down                          stop the workloads (keeps the database volume)
-  k8s:status | k8s:logs [service]   what's running, and its logs
-  k8s:port-forward <svc> <port>     tunnel to Mailpit (mailpit 8025) or the API
-  k8s:psql                          psql inside the Postgres pod
-  k8s:reset [--yes]                 delete the namespace and ALL data
 
 Native — needs Java 21, Node 20+ and a running PostgreSQL
   up | down | status                start, stop, what's running
@@ -512,16 +381,6 @@ case "${1:-}" in
   compose:down)   step compose_down ;;
   compose:build)  step compose_build ;;
   compose:logs)   step compose_logs "${2:-}" ;;
-  k8s:up)         step k8s_up ;;
-  k8s:down)       step k8s_down ;;
-  k8s:rebuild)    step k8s_rebuild ;;
-  k8s:status)     step k8s_status ;;
-  k8s:logs)       step k8s_logs "${2:-}" ;;
-  k8s:psql)       step k8s_psql ;;
-  k8s:reset)      step k8s_reset "${2:-}" ;;
-  k8s:port-forward)
-    step k8s_port_forward "${2:-}" "${3:-}"
-    ;;
   role)
     if [ -z "${2:-}" ] || [ -z "${3:-}" ]; then
       echo -e "${YELLOW}Usage: ./manage.sh role <email> <client|staff|admin>${NC}"

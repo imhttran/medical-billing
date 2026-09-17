@@ -1,7 +1,8 @@
-# spring-template
+# medical-billing
 
-Full-stack auth template: **Next.js → Spring Boot (Kotlin) API → PostgreSQL**. The
-browser only ever talks to Next.js; the API is proxied server-side and never
+Medical billing for a small primary-care practice, on synthetic data:
+**Next.js → Spring Boot (Kotlin) API → PostgreSQL**. Billing rather than an EHR.
+The browser only ever talks to Next.js; the API is proxied server-side and never
 exposed directly.
 
 ```
@@ -37,17 +38,6 @@ the frontend on :3000. Migrations run automatically on the API's first boot.
 **`htt-billing-db`**. **[docs/DATABASE.md](docs/DATABASE.md)** has the DSN, setting
 up a local instance, and what an older `.env` needs.
 
-**Kubernetes** — the same stack on Rancher Desktop's cluster, needs Kubernetes
-enabled (_Preferences → Kubernetes_) and Docker running:
-
-```bash
-make k8s-up         # or: ./manage.sh k8s:up
-open http://template.localhost
-```
-
-`k8s/` holds plain manifests for the same four services; see
-**[docs/KUBERNETES.md](docs/KUBERNETES.md)**.
-
 ### Entry points
 
 `make` is a thin wrapper over `./manage.sh`, which owns the steps — so there is
@@ -66,9 +56,7 @@ one implementation of each:
 | role     | `make role EMAIL=you@mail.com ROLE=admin` | `./manage.sh role <email> <role>`       |
 
 `make help` and `./manage.sh help` list every target and subcommand;
-`./manage.sh` with no argument prints the same list as `help`. Kubernetes has its own targets
-(`make k8s-up`, `make k8s-rebuild`, `make k8s-status`, …) — see
-**[docs/KUBERNETES.md](docs/KUBERNETES.md)**.
+`./manage.sh` with no argument prints the same list as `help`.
 
 Dev admin: **admin@mail.com** / **Password1234!** — the first login from a new
 browser asks for a 2FA code; in development it's always `1234`, and the browser
@@ -78,14 +66,11 @@ sending them; under compose, Mailpit collects them at http://localhost:8025.
 ## Docs
 
 - **[docs/FEATURE.md](docs/FEATURE.md)** — what this build does
+- **[docs/PLAN.md](docs/PLAN.md)** — what it was meant to do, and what it left open
 - **[docs/DATABASE.md](docs/DATABASE.md)** — install Postgres, Flyway schema, reset, tests
-- **[docs/KUBERNETES.md](docs/KUBERNETES.md)** — the Rancher Desktop cluster: images, ingress, commands
+- **[docs/BACKEND.md](docs/BACKEND.md)** — the decisions behind the backend and the traps it can trip
 - **`.env.example`** — every config variable
 - **`.env.dev`** — the local development values, read by the backend and by `./manage.sh`
-
-Background, for how the backend got here (each stack replaced rather than run
-alongside): **[docs/SPRING_MIGRATION.md](docs/SPRING_MIGRATION.md)** — the legacy
-backend to Spring port, and the later Java to Kotlin port.
 
 ## Tests
 
@@ -102,7 +87,7 @@ database.
 
 ```bash
 make role EMAIL=you@email.com ROLE=admin
-# or: ./manage.sh role you@email.com admin  /  ./manage.sh → [8]
+# or: ./manage.sh role you@email.com admin
 ```
 
 That is the platform gate the original endpoints use. Billing has its own
@@ -113,19 +98,25 @@ practice-B record. See **[docs/FEATURE.md](docs/FEATURE.md)**.
 ## Backend
 
 Kotlin 2.2 on a Java 21 toolchain, one Gradle module, source in
-`backend/src/main/kotlin/com/htt/billing/`, organized by capability rather than
-by layer — each package owns its controller, service and repository:
+`backend/src/main/kotlin/com/htt/billing/`. Controllers, services and repositories
+sit in their layer's package with the capability as the sub-package, so
+`api/patient/PatientController.kt`, `service/patient/PatientService.kt` and
+`repository/patient/PatientRepository.kt`, across the capabilities `identity`,
+`security`, `audit`, `practice`, `patient`, `coverage`, `coding`, `claim`,
+`adjudication`, `payment`, `workflow`, `fhir` and `demo`.
 
-| Package    | What's in it                                                                                                                    |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `identity` | the platform user: auth, tokens, JWT, scrypt hashing, the mail queue, profiles, users, the ranked `client`/`staff`/`admin` gate |
-| `security` | billing authorization: permissions, roles, role assignments, and the org-scoped checks                                          |
-| `audit`    | the audit trail                                                                                                                 |
-| `practice` | organizations and providers, the practice and who works in it                                                                   |
-| `patient`  | patients                                                                                                                        |
-| `coverage` | payers and a patient's coverage                                                                                                 |
-| `coding`   | ICD-10-CM and CPT/HCPCS search                                                                                                  |
-| `common`   | HTTP plumbing (`Api`, the exception handler, `Inputs`) and app config                                                           |
+What stays in a capability package is what belongs to no layer:
+
+| Package        | What's in it                                                                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `identity`     | the platform user's plumbing: the token gate, scrypt hashing, the mailer and its queue worker, roles, tokens, and the `set-role` subcommand |
+| `security`     | the permission catalogue the roles are built from                                                                                           |
+| `claim`        | the claim's status machine, its validation, and the facts it refers to                                                                      |
+| `adjudication` | the simulated payer's rules                                                                                                                 |
+| `payment`      | the one place a balance is subtracted                                                                                                       |
+| `fhir`         | the R4 mapping and the resources it builds                                                                                                  |
+| `demo`         | the synthetic dataset                                                                                                                       |
+| `common`       | HTTP plumbing (`Api`, the exception handler, `Inputs`) and app config                                                                       |
 
 Repositories are one class per table group, raw SQL through `JdbcClient`.
 
@@ -142,17 +133,16 @@ cd backend
 ./gradlew test      # tests only
 ```
 
-Tests sit beside the source in `backend/src/test/kotlin/`. There's no Kotlin
-formatter in the build, so `./manage.sh format` covers the frontend and the
-Markdown only. Why the backend is shaped this way, and the traps a change can
-trip, are in **[docs/SPRING_MIGRATION.md](docs/SPRING_MIGRATION.md)**.
+Tests sit beside the source in `backend/src/test/kotlin/` and stay in capability
+packages rather than mirroring the layers. There's no Kotlin formatter in the
+build, so `./manage.sh fmt` covers the frontend and the Markdown only. Why the
+backend is shaped this way, and the traps a change can trip, are in
+**[docs/BACKEND.md](docs/BACKEND.md)**.
 
 ## API
 
-53 endpoints under `/api/*` — see the controllers in
-`backend/src/main/kotlin/com/htt/billing/identity/`, `.../practice/`,
-`.../patient/`, `.../coverage/`, `.../coding/`, `.../claim/`, `.../payment/`,
-`.../workflow/`, `.../audit/`, `.../fhir/`:
+53 endpoints under `/api/*` — `backend/src/main/kotlin/com/htt/billing/api/` holds
+every controller, one package per capability:
 
 - **Public auth** (8): signup, verify, resend-verification, forgot-password,
   reset-password, login, login/verify (2FA code), login/resend (2FA code)

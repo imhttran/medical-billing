@@ -8,7 +8,7 @@ Tom Tran is a Software Engineer.
 
 Day to day Tom uses:
 
-- Gmail (imhttan@gmail.com)
+- Gmail
 - Google Drive and Google Calendar
 - Zed
 - Java Spring

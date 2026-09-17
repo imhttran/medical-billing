@@ -35,7 +35,7 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="login-container">
-      <PageTitle title="Reset Password | Frontend Template" />
+      <PageTitle title="Reset Password | Medical Billing" />
       <form className="login-form" onSubmit={handleSubmit}>
         <h1>Reset Password</h1>
         <p>Choose a new password</p>

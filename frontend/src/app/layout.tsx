@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  description: "Auth, dashboard, and profile template frontend.",
+  description: "Medical billing for a small primary-care practice.",
 };
 
 export default function RootLayout({

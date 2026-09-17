@@ -17,7 +17,6 @@ Not built:
 - Inbound ClaimResponse import. Our simulated payers send nothing back, so the reverse of the export waits on a real requirement.
 - A billing role-assignment endpoint. `RoleAdminService` enforces and audits the rule but nothing exposes it over HTTP, so V1 assigns platform roles through user administration and practice roles through seeding.
 - The R4 `diagnosis` element on FHIR export. HAPI's `diagnosisCodeableConcept` spelling is what goes out. The import accepts both, so only conformant senders see the difference.
-- The old template naming in `README.md`, `frontend/src/app/layout.tsx` and `k8s/`, which still says `spring-template` in the namespace, the config maps and the hostname.
 
 Two open permission decisions, both written up in the permission matrix section of `docs/FEATURE.md`:
 
@@ -122,13 +121,10 @@ The product should be designed so it can eventually support a medical billing co
 - Spring Boot
 - Gradle with Kotlin DSL
 - Spring Web
-- Spring Security
-- Spring Data JPA
-- Bean Validation
+- Spring JDBC, `JdbcClient` with hand-written SQL rather than an ORM
 - HAPI FHIR R4
 - Flyway
 - JUnit
-- Testcontainers
 
 ### Database
 

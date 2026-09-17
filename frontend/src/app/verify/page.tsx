@@ -37,7 +37,7 @@ export default function VerifyPage() {
 
   return (
     <div className="login-container">
-      <PageTitle title="Verify Email | Frontend Template" />
+      <PageTitle title="Verify Email | Medical Billing" />
       <div className="login-form">
         <h1>Verifying…</h1>
         <p id="verify-message">{message}</p>

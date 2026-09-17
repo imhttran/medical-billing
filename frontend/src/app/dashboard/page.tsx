@@ -285,7 +285,7 @@ export default function DashboardPage() {
     <div
       className={isStaff ? "dashboard-container wide" : "dashboard-container"}
     >
-      <PageTitle title="Dashboard | Frontend Template" />
+      <PageTitle title="Dashboard | Medical Billing" />
       <PageHeader
         title="Dashboard"
         subtitle={

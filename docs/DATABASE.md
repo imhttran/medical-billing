@@ -12,12 +12,11 @@ root `.env` overrides that.
 postgres://postgres:postgres@localhost:5432/htt-billing-db?sslmode=disable
 ```
 
-The database is named **`htt-billing-db`** — it was `rust_template`, then
-`template-db`, and was renamed as the app stopped being a template. An existing
-local database keeps its old name, so either rename it in place with
-`ALTER DATABASE "template-db" RENAME TO "htt-billing-db"`, or point
-`DATABASE_URL` at whatever you have. The hyphens are legal in a Postgres name but
-SQL has to quote them, e.g. `DROP DATABASE "htt-billing-db"`.
+The database is named **`htt-billing-db`** — it was `template-db` when this
+started from a template. An existing local database keeps its old name, so either
+rename it in place with `ALTER DATABASE "template-db" RENAME TO "htt-billing-db"`,
+or point `DATABASE_URL` at whatever you have. The hyphens are legal in a Postgres
+name but SQL has to quote them, e.g. `DROP DATABASE "htt-billing-db"`.
 
 - `manage.sh` (reset-database, backend startup check) reads `.env` first, then
   `.env.dev`. `set-role` is the exception: it reads `DATABASE_URL` from the
@@ -39,8 +38,8 @@ createdb "htt-billing-db"
 **Option 2 — throwaway instance (no service installed): lost on reboot**
 
 ```bash
-initdb -D /tmp/spring-template-pg -A trust
-pg_ctl -D /tmp/spring-template-pg -l /tmp/spring-template-pg.log start
+initdb -D /tmp/htt-billing-pg -A trust
+pg_ctl -D /tmp/htt-billing-pg -l /tmp/htt-billing-pg.log start
 psql -d postgres -c "CREATE USER postgres WITH PASSWORD 'postgres' SUPERUSER;"
 createdb "htt-billing-db" -U postgres
 ```
@@ -52,12 +51,13 @@ before launching the backend).
 
 Flyway, applied automatically when the Spring API boots:
 
-- Migration files live in `backend/src/main/resources/db/migration/` — `V1__init.sql`
-  holds the original schema (users, profiles, the mail queue, 2FA),
-  `V2__billing_rbac.sql` adds organizations and the billing RBAC tables,
-  `V3__patients_providers_coverage_codes.sql` adds the billing entities and the
-  seeded terminology, and `V4__claims_adjudication.sql` adds claims, their
-  diagnoses and lines, adjudications, and the payer fee schedule.
+- Migration files live in `backend/src/main/resources/db/migration/`. `V1__init.sql`
+  holds the original schema (users, profiles, the mail queue, 2FA), `V2` adds
+  organizations and the billing RBAC tables, `V3` the billing entities and the
+  seeded terminology, `V4` claims, their diagnoses and lines, adjudications and the
+  payer fee schedule, `V5` the practice administrator's claim permissions, `V6`
+  claim rejection, `V7` the payments, `V8` the work items, `V9` the deliberately
+  unpriced demo service, and `V10` the provider external id FHIR reconciles on.
   Flyway reads that location on every boot and records what it applied in a
   `flyway_schema_history` table — a second boot is a no-op, so there's no
   separate migrate step.
@@ -67,40 +67,41 @@ Flyway, applied automatically when the Spring API boots:
   refuse to start. Baselining records a starting point instead, and since every
   migration is `IF NOT EXISTS`, either path is a no-op against an
   already-migrated database.
-- Schema changes: add a `V2__*.sql` file. There is no list to keep in sync — the
-  filename is the registration.
-- Consolidating migration files (`V2__2fa.sql` folded into `V1__init.sql`) means
-  a database that recorded the old pair has a history entry Flyway can't resolve
-  locally, and validation fails with "applied migration not resolved". Reset the
-  schema (`./manage.sh db:reset`, or the manual reset below) and let the
-  consolidated file apply — dev and test databases hold nothing worth keeping.
+- Schema changes: add a `V11__*.sql` file, numbered after the last one. There is
+  no list to keep in sync — the filename is the registration.
+- Never edit a migration that has already been applied. Flyway checksums the
+  files, and a changed checksum fails validation on the next boot. A mistake goes
+  in a new migration, or the database gets reset.
 
 Tables:
 
-| Table                   | Purpose                                                     |
-| ----------------------- | ----------------------------------------------------------- |
-| `users`                 | accounts: email, scrypt password, role, verify/reset tokens |
-| `user_profiles`         | one-time registration details (`ON DELETE CASCADE`)         |
-| `email_queue`           | outbound mail (drained by the `@Scheduled` worker)          |
-| `user_devices`          | trusted 2FA devices that skip the login code                |
-| `login_codes`           | pending 2FA codes (expiry, attempts, resends)               |
-| `organizations`         | practices; the tenant every billing record is scoped to     |
-| `permissions`           | the permission catalogue                                    |
-| `roles`                 | predefined roles, platform- or organization-scoped          |
-| `role_permissions`      | which permissions each role carries                         |
-| `user_role_assignments` | who holds which role, in which organization                 |
-| `audit_events`          | audit trail for billing and access-management actions       |
-| `providers`             | practitioners, scoped to a practice                         |
-| `patients`              | synthetic patients, scoped to a practice                    |
-| `coverages`             | a patient's insurance, `ON DELETE CASCADE` from `patients`  |
-| `payers`                | shared reference data, not tenant-owned                     |
-| `diagnosis_codes`       | ICD-10-CM terminology, keyed by code                        |
-| `procedure_codes`       | CPT/HCPCS terminology, keyed by code                        |
-| `claims`                | the billable encounter; holds no total, which is summed     |
-| `claim_diagnoses`       | the claim's ICD-10 codes, cascading from `claims`           |
-| `claim_lines`           | its service lines, and the payer's per-line figures         |
-| `adjudications`         | one immutable row per submission                            |
-| `payer_fee_schedule`    | what a payer allows per procedure, and the patient copay    |
+| Table                   | Purpose                                                              |
+| ----------------------- | -------------------------------------------------------------------- |
+| `users`                 | accounts: email, scrypt password, role, verify/reset tokens          |
+| `user_profiles`         | one-time registration details (`ON DELETE CASCADE`)                  |
+| `email_queue`           | outbound mail (drained by the `@Scheduled` worker)                   |
+| `user_devices`          | trusted 2FA devices that skip the login code                         |
+| `login_codes`           | pending 2FA codes (expiry, attempts, resends)                        |
+| `organizations`         | practices; the tenant every billing record is scoped to              |
+| `permissions`           | the permission catalogue                                             |
+| `roles`                 | predefined roles, platform- or organization-scoped                   |
+| `role_permissions`      | which permissions each role carries                                  |
+| `user_role_assignments` | who holds which role, in which organization                          |
+| `audit_events`          | audit trail for billing and access-management actions                |
+| `providers`             | practitioners, scoped to a practice, keyed for FHIR by `external_id` |
+| `patients`              | synthetic patients, scoped to a practice                             |
+| `coverages`             | a patient's insurance, `ON DELETE CASCADE` from `patients`           |
+| `payers`                | shared reference data, not tenant-owned                              |
+| `diagnosis_codes`       | ICD-10-CM terminology, keyed by code                                 |
+| `procedure_codes`       | CPT/HCPCS terminology, keyed by code                                 |
+| `claims`                | the billable encounter; holds no total, which is summed              |
+| `claim_diagnoses`       | the claim's ICD-10 codes, cascading from `claims`                    |
+| `claim_lines`           | its service lines, and the payer's per-line figures                  |
+| `adjudications`         | one immutable row per submission                                     |
+| `payer_fee_schedule`    | what a payer allows per procedure, and the patient copay             |
+| `insurance_payments`    | the payer's remittance, recorded with its answer                     |
+| `patient_payments`      | payments entered by hand against the claim they settle               |
+| `work_items`            | the queue: a rejection or a denied service, and its state            |
 
 `claims` has no `total_charge` column. A stored total is a second copy of the
 line charges that a bug can desync, so it is summed on read. The adjudication
@@ -115,14 +116,14 @@ ever queried with it (`organization_id IN (:ids)` on the list queries). Payers
 and the two code tables have no `organization_id` because they are the same for
 every practice.
 
-Two rules apply to every query in the repository classes (one per capability
-package under `backend/src/main/kotlin/com/htt/billing/`). `email_queue`'s column
+Two rules apply to every query in the repository classes, one per capability
+under `backend/src/main/kotlin/com/htt/billing/repository/`. `email_queue`'s column
 is named `"to"`, a reserved word, so queries quote it. And the
 `AS "camelCase"` aliases are load-bearing rather than decoration: rows map onto
 the row data classes through their primary constructors, matched by parameter
 name, so an alias that drifts from the property name fails at runtime on that
-column rather than at compile time. The rest of the Kotlin-specific traps are
-listed in [SPRING_MIGRATION.md](SPRING_MIGRATION.md).
+column rather than at compile time. The rest of the traps are
+listed in [BACKEND.md](BACKEND.md).
 
 Dev seed (`DevAdminSeeder`, only when `NODE_ENV=development`): upserts the dev
 admin (README has the credentials) plus their profile, so it isn't blocked by
