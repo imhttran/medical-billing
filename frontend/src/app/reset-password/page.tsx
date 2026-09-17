@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { confirmedPasswordOrAlert, submitForm } from "@/lib/api";
 import { PageTitle } from "@/components/PageTitle";
+import { AuthMark } from "@/components/AuthMark";
 
 export default function ResetPasswordPage() {
   const [busy, setBusy] = useState(false);
@@ -35,6 +36,7 @@ export default function ResetPasswordPage() {
   return (
     <div className="login-container">
       <PageTitle title="Reset Password | Medical Billing" />
+      <AuthMark />
       <form className="login-form" onSubmit={handleSubmit}>
         <h1>Reset Password</h1>
         <p>Choose a new password</p>

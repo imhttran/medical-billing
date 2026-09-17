@@ -10,7 +10,7 @@ import {
 } from "react";
 import { confirmedPasswordOrAlert, submitForm } from "@/lib/api";
 import { PageTitle } from "@/components/PageTitle";
-import { Logo } from "@/components/Logo";
+import { AuthMark } from "@/components/AuthMark";
 
 type LoginResult = { token: string; twoFactorRequired?: boolean };
 
@@ -151,9 +151,7 @@ export default function LoginPage() {
   return (
     <div className="login-container">
       <PageTitle title="Login | Medical Billing" />
-      <div className="login-logo">
-        <Logo size={48} />
-      </div>
+      <AuthMark />
       {pendingToken ? (
         <form className="login-form" autoComplete="off">
           <h1>Verify It&apos;s You</h1>

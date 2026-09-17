@@ -3,6 +3,7 @@
 import { type FormEvent } from "react";
 import { confirmedPasswordOrAlert, submitAuthedForm } from "@/lib/api";
 import { PageTitle } from "@/components/PageTitle";
+import { AuthMark } from "@/components/AuthMark";
 
 export default function ChangePasswordPage() {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -22,6 +23,7 @@ export default function ChangePasswordPage() {
   return (
     <div className="login-container">
       <PageTitle title="Change Password | Medical Billing" />
+      <AuthMark />
       <form className="login-form" onSubmit={handleSubmit}>
         <h1>Change Password</h1>
         <p>Choose a new password</p>

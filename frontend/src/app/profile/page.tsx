@@ -4,6 +4,7 @@ import { type FormEvent } from "react";
 import { submitAuthedForm } from "@/lib/api";
 import { US_STATES } from "@/lib/usStates";
 import { PageTitle } from "@/components/PageTitle";
+import { AuthMark } from "@/components/AuthMark";
 
 export default function ProfilePage() {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -28,6 +29,7 @@ export default function ProfilePage() {
   return (
     <div className="login-container">
       <PageTitle title="Complete Your Profile | Medical Billing" />
+      <AuthMark />
       <form className="login-form" onSubmit={handleSubmit}>
         <h1>Complete Your Profile</h1>
         <p>Tell us a bit about yourself before continuing</p>

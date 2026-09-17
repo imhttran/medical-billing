@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { API_BASE } from "@/lib/api";
 import { PageTitle } from "@/components/PageTitle";
+import { AuthMark } from "@/components/AuthMark";
 
 export default function VerifyPage() {
   const [message, setMessage] = useState("Please wait.");
@@ -38,6 +39,7 @@ export default function VerifyPage() {
   return (
     <div className="login-container">
       <PageTitle title="Verify Email | Medical Billing" />
+      <AuthMark />
       <div className="login-form">
         <h1>Verifying…</h1>
         <p id="verify-message">{message}</p>

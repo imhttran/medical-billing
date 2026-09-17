@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { submitEmailForm } from "@/lib/api";
 import { PageTitle } from "@/components/PageTitle";
+import { AuthMark } from "@/components/AuthMark";
 
 export default function ResendVerificationPage() {
   const [busy, setBusy] = useState(false);
@@ -19,6 +20,7 @@ export default function ResendVerificationPage() {
   return (
     <div className="login-container">
       <PageTitle title="Resend Verification | Medical Billing" />
+      <AuthMark />
       <form className="login-form" onSubmit={handleSubmit}>
         <h1>Resend Verification</h1>
         <p>Enter your email and we&apos;ll send a new verification link</p>
