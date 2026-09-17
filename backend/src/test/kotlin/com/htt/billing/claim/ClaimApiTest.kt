@@ -163,6 +163,31 @@ class ClaimApiTest : BillingApiTest() {
     }
 
     @Test
+    fun aClaimThePayerCoversInFullIsPaidWithoutAPatientShare() {
+        val fix = fixture()
+        // A preventive visit the fee schedule covers with no copay, so nothing is
+        // left owed once the payer has answered.
+        val claimId = createClaim(
+            fix.billingToken,
+            fix.data,
+            claimBody(
+                fix.data,
+                diagnoses = listOf("Z00.00"),
+                procedureCode = "99396",
+                charge = "220.00",
+            ),
+        )
+
+        assertStatus(200, env.doJson("POST", "/api/claims/$claimId/ready", fix.billingToken, null))
+        val submitted = env.doJson("POST", "/api/claims/$claimId/submit", fix.billingToken, null)
+        assertStatus(200, submitted)
+
+        assertEquals("PAID", submitted.body.path("claim").path("status").asText())
+        assertEquals(165.0, submitted.body.path("adjudication").path("payerResponsibility").asDouble())
+        assertEquals(0.0, submitted.body.path("adjudication").path("patientResponsibility").asDouble())
+    }
+
+    @Test
     fun anotherPracticesClaimIsNotFound() {
         val inB = fixture(practiceB.id)
         val claimInB = createClaim(inB.billingToken, inB.data)

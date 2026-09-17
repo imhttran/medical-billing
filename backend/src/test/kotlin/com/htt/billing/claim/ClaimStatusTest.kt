@@ -29,6 +29,7 @@ class ClaimStatusTest {
         assertTrue(ClaimStatus.canMove(SUBMITTED, ACCEPTED))
         assertTrue(ClaimStatus.canMove(ACCEPTED, ADJUDICATED))
         assertTrue(ClaimStatus.canMove(ACCEPTED, DENIED))
+        assertTrue(ClaimStatus.canMove(ACCEPTED, PAID))
         assertTrue(ClaimStatus.canMove(ADJUDICATED, PAID))
     }
 

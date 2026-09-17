@@ -38,7 +38,10 @@ enum class ClaimStatus {
             // before it is submitted.
             READY to setOf(SUBMITTED, DRAFT),
             SUBMITTED to setOf(ACCEPTED, REJECTED),
-            ACCEPTED to setOf(ADJUDICATED, DENIED),
+            // PAID is reachable straight from ACCEPTED: a claim whose services the
+            // payer covers in full leaves nothing for the patient, so there is
+            // never an adjudicated-but-owed stage to pass through.
+            ACCEPTED to setOf(ADJUDICATED, DENIED, PAID),
             ADJUDICATED to setOf(PARTIALLY_PAID, PAID, CLOSED),
             PARTIALLY_PAID to setOf(PAID, CLOSED),
             PAID to setOf(CLOSED),
