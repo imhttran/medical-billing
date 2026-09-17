@@ -43,6 +43,22 @@ class AuthorizationService(
         permits(grantsFor(userId), permission, organizationId)
 
     /**
+     * Whether the user holds [permission] through any active grant, whatever scope
+     * that grant carries.
+     *
+     * For the actions that are not tenant-owned. User administration is the only
+     * one, and it is not scoped yet — `users` carries no practice of its own, so
+     * the only link to one is a role assignment, which a freshly created account
+     * doesn't have. So this answers "holds it somewhere", which is the same
+     * question the ranked `client`/`staff`/`admin` column answered before it.
+     *
+     * Scoping the user list to the caller's practices is its own piece of work,
+     * because it means deciding how an account belongs to a practice.
+     */
+    fun holds(userId: Int, permission: String): Boolean =
+        grantsFor(userId).any { it.permission == permission }
+
+    /**
      * The organization a new record belongs to.
      *
      * A caller may name one, and it is checked against their grants either way.
@@ -85,6 +101,9 @@ class AuthorizationService(
     }
 
     fun grantsFor(userId: Int): List<Grant> = rbac.permissionGrants(userId)
+
+    /** The codes of the roles the user holds, at any scope, for `/api/me`. */
+    fun rolesFor(userId: Int): List<String> = rbac.roleCodesFor(userId)
 
     /**
      * The organizations the user may see with [permission], for list endpoints.

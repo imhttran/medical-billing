@@ -1,7 +1,6 @@
 package com.htt.billing.common
 
 import com.htt.billing.identity.AuthUser
-import com.htt.billing.identity.Roles
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -62,16 +61,6 @@ object Api {
             decoder.readTree(raw)
         } catch (unparsable: IOException) {
             MissingNode.getInstance()
-        }
-    }
-
-    /**
-     * Role gate for the staff/admin routes: 403s unless the user's role is
-     * [minimumRole] or higher.
-     */
-    fun requireRole(user: AuthUser, minimumRole: String) {
-        if (!Roles.hasRole(user.role, minimumRole)) {
-            throw ApiRejection(HttpStatus.FORBIDDEN, msg("Insufficient permissions"))
         }
     }
 

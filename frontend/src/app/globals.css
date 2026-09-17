@@ -619,25 +619,6 @@ body {
    (.table-scroll) instead — flex-wrap here would make the table auto-layout
    algorithm size this column to its min-content, squeezing four buttons into
    a tall single-column stack instead of the intended horizontal scroll. */
-/* The role picker in the users table is the one select that doesn't live in an
-   .input-group, so it needs its own box. */
-.user-table select {
-  padding: var(--space-1) var(--space-2);
-  background-color: var(--raised-color);
-  color: var(--text-color);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  cursor: pointer;
-}
-
-/* The billing roles under that picker. Small and muted, because they are a fact
-   about the account rather than a control. */
-.user-table .role-codes {
-  margin-top: var(--space-1);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
 .user-table td:last-child {
   display: flex;
   align-items: flex-start;

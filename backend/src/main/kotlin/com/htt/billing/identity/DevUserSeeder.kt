@@ -49,7 +49,6 @@ class DevUserSeeder(
             var id = users.insertUserIfAbsent(
                 member.email,
                 hasher.hash(DEV_PASSWORD),
-                member.coarseRole,
                 true,
             )
             if (id == null) {

@@ -18,9 +18,8 @@ class UsersListRoleCodesTest : BillingApiTest() {
 
     @Test
     fun listCarriesEachUsersBillingRoles() {
+        // PRACTICE_ADMIN already holds USER_VIEW, which is what the list asks for.
         val admin = signIn(RoleCodes.PRACTICE_ADMIN, practiceA.id)
-        // The list itself is gated on the coarse role, not on a billing permission.
-        env.setRole(admin.email, "admin")
 
         val billerId = insertUser("biller")
         assign(billerId, RoleCodes.BILLER, practiceA.id)
@@ -43,7 +42,6 @@ class UsersListRoleCodesTest : BillingApiTest() {
         // A list that reported revoked assignments would show permissions the
         // user does not have, which is worse than showing none.
         val admin = signIn(RoleCodes.PRACTICE_ADMIN, practiceA.id)
-        env.setRole(admin.email, "admin")
 
         val revokedId = insertUser("revoked")
         assign(revokedId, RoleCodes.BILLER, practiceA.id)

@@ -127,10 +127,12 @@ class AuthController(
             "user" to mapOf(
                 "id" to user.id,
                 "email" to user.email,
-                "role" to user.role,
                 "emailVerified" to user.emailVerified,
                 "mustChangePassword" to user.mustChangePassword,
                 "hasProfile" to user.hasProfile,
+                // The billing roles the caller holds, which is the whole of what
+                // a session is — the ranked client/staff/admin column is gone.
+                "roles" to authorization.rolesFor(user.id),
                 "permissions" to authorization.grantsFor(user.id)
                     .map { it.permission }
                     .distinct()

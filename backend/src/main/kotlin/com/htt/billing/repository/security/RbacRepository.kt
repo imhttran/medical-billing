@@ -7,8 +7,8 @@ import org.springframework.stereotype.Repository
 
 /**
  * Roles, their permissions, and role assignments. The assignment row is the
- * pair (who, which role, in which organization) — read as one query per user,
- * never as a `users.role` column.
+ * pair (who, which role, in which organization), and it is the only thing that
+ * grants anything.
  */
 @Repository
 class RbacRepository(private val jdbc: JdbcClient) {
@@ -54,6 +54,24 @@ class RbacRepository(private val jdbc: JdbcClient) {
         .query(Role::class.java)
         .optional()
         .orElse(null)
+
+    /**
+     * The codes of the roles this user holds, at any scope, sorted. What
+     * `/api/me` reports so a signed-in account can say what it is.
+     */
+    fun roleCodesFor(userId: Int): List<String> = jdbc
+        .sql(
+            """
+            SELECT DISTINCT r.code AS code
+            FROM user_role_assignments a
+            JOIN roles r ON r.id = a.role_id AND r.active
+            WHERE a.user_id = :userId AND a.active
+            ORDER BY code
+            """,
+        )
+        .param("userId", userId)
+        .query(String::class.java)
+        .list()
 
     /** @return the new assignment id. */
     fun insertAssignment(userId: Int, roleId: Int, organizationId: Int?, createdBy: Int?): Int = jdbc

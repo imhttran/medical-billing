@@ -127,21 +127,6 @@ class TestEnv(private val mvc: MockMvc, private val jdbc: JdbcClient) {
         assertStatus(201, doJson("POST", "/api/profile", token, profileBody()))
     }
 
-    /** Sets a user's role directly in the store. */
-    fun setRole(email: String, role: String) {
-        jdbc.sql("UPDATE users SET role = :role WHERE email = :email")
-            .param("role", role)
-            .param("email", email)
-            .update()
-    }
-
-    fun roleOf(email: String): String? = jdbc
-        .sql("SELECT role FROM users WHERE email = :email")
-        .param("email", email)
-        .query(String::class.java)
-        .optional()
-        .orElse(null)
-
     fun ownUserId(token: String): Int {
         val me = doJson("GET", "/api/me", token, null)
         assertStatus(200, me)

@@ -47,13 +47,6 @@ object DemoDataset {
         val email: String,
         val firstName: String,
         val lastName: String,
-        /**
-         * `users.role`, the legacy ranked `client`/`staff`/`admin`. It now gates
-         * exactly one screen, `/api/users`, and nothing about billing. So it is
-         * set from whether the role administers users at all — the four billing
-         * roles hold no `USER_*` permission and take `client`.
-         */
-        val coarseRole: String,
         /** Billing roles granted in the demo practice, from [RoleCodes]. */
         val billingRoles: List<String>,
     )
@@ -65,18 +58,22 @@ object DemoDataset {
      * all arrive verified with a filled profile, so none of them is stopped by
      * the onboarding gates.
      *
+     * A login's whole identity is the billing roles it holds. The ranked
+     * `client`/`staff`/`admin` column these used to carry is gone — it said
+     * nothing about what an account could do.
+     *
      * The roles here are what the accounts are *granted*; the grants themselves
      * are made per organization by [com.htt.billing.service.demo.DemoResetService],
      * which is the only thing that knows the demo practice's id.
      */
     val DEV_TEAM: List<DemoUser> = listOf(
-        DemoUser("admin@mail.com", "Dev", "Admin", "admin", DEV_ADMIN_ROLES),
-        DemoUser("platform@mail.com", "Pat", "Nunez", "admin", listOf(RoleCodes.PLATFORM_ADMIN)),
-        DemoUser("manager@mail.com", "Morgan", "Wells", "client", listOf(RoleCodes.BILLING_MANAGER)),
-        DemoUser("biller@mail.com", "Bailey", "Ortiz", "client", listOf(RoleCodes.BILLER)),
+        DemoUser("admin@mail.com", "Dev", "Admin", DEV_ADMIN_ROLES),
+        DemoUser("platform@mail.com", "Pat", "Nunez", listOf(RoleCodes.PLATFORM_ADMIN)),
+        DemoUser("manager@mail.com", "Morgan", "Wells", listOf(RoleCodes.BILLING_MANAGER)),
+        DemoUser("biller@mail.com", "Bailey", "Ortiz", listOf(RoleCodes.BILLER)),
         // Named for the clinician the seeded claims already go out under.
-        DemoUser("provider@mail.com", "Dana", "Reyes", "client", listOf(RoleCodes.PROVIDER)),
-        DemoUser("readonly@mail.com", "Robin", "Iyer", "client", listOf(RoleCodes.READ_ONLY)),
+        DemoUser("provider@mail.com", "Dana", "Reyes", listOf(RoleCodes.PROVIDER)),
+        DemoUser("readonly@mail.com", "Robin", "Iyer", listOf(RoleCodes.READ_ONLY)),
     )
 
     data class DemoProvider(

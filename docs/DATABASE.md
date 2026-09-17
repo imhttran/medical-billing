@@ -107,9 +107,10 @@ Tables:
 line charges that a bug can desync, so it is summed on read. The adjudication
 does store its totals, because that row is the record of what the payer said.
 
-`users.role` is untouched by the billing RBAC tables on purpose — it stays the
-coarse staff/admin gate the original endpoints use, while billing authorization
-reads permissions from `user_role_assignments`.
+Authorization reads permissions from `user_role_assignments` and nothing else.
+The ranked `users.role` column that used to sit beside it was dropped in
+`V11__drop_users_role.sql` — it granted nothing, and every value it could take
+was either implied by a grant or contradicted by one.
 
 Every table that belongs to a practice carries `organization_id` and is only
 ever queried with it (`organization_id IN (:ids)` on the list queries). Payers

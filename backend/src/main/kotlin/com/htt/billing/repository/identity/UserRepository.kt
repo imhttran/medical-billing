@@ -17,7 +17,6 @@ class UserRepository(private val jdbc: JdbcClient) {
     data class Account(
         val id: Int,
         val email: String,
-        val role: String,
         val emailVerified: Boolean,
         val mustChangePassword: Boolean,
         val password: String,
@@ -43,21 +42,18 @@ class UserRepository(private val jdbc: JdbcClient) {
     data class UserWithRole(
         val id: Int,
         val email: String,
-        val role: String,
         val emailVerified: Boolean,
     )
-
-    data class RoleRow(val id: Int, val email: String, val role: String)
 
     data class ListItem(
         val id: Int,
         val email: String,
-        val role: String,
         val emailVerified: Boolean,
         val createdAt: Instant,
         /**
          * The RBAC codes this user holds, sorted. Empty when nobody has granted
-         * them one. Distinct from [role], which is the legacy ranked column.
+         * them one. This is the only thing that grants anything — the ranked
+         * `client`/`staff`/`admin` column that used to sit beside it is gone.
          */
         val roleCodes: List<String>,
     )
@@ -65,7 +61,7 @@ class UserRepository(private val jdbc: JdbcClient) {
     fun findAccountByEmail(email: String): Account? = jdbc
         .sql(
             """
-            SELECT id, email, role,
+            SELECT id, email,
                    email_verified       AS "emailVerified",
                    must_change_password AS "mustChangePassword",
                    password,
@@ -159,20 +155,18 @@ class UserRepository(private val jdbc: JdbcClient) {
     fun insertUserIfAbsent(
         email: String,
         passwordHash: String,
-        role: String,
         emailVerified: Boolean,
     ): Int? = jdbc
         .sql(
             """
-            INSERT INTO users (email, password, role, email_verified)
-            VALUES (:email, :password, :role, :verified)
+            INSERT INTO users (email, password, email_verified)
+            VALUES (:email, :password, :verified)
             ON CONFLICT (email) DO NOTHING
             RETURNING id
             """,
         )
         .param("email", email)
         .param("password", passwordHash)
-        .param("role", role)
         .param("verified", emailVerified)
         .query(Int::class.javaObjectType)
         .optional()
@@ -187,7 +181,7 @@ class UserRepository(private val jdbc: JdbcClient) {
             """
             INSERT INTO users (email, password, email_verified, must_change_password)
             VALUES (:email, :password, true, true)
-            RETURNING id, email, role, email_verified AS "emailVerified"
+            RETURNING id, email, email_verified AS "emailVerified"
             """,
         )
         .param("email", email)
@@ -282,42 +276,26 @@ class UserRepository(private val jdbc: JdbcClient) {
         .optional()
         .orElse(null)
 
-    fun updateRole(id: Int, role: String): RoleRow? = jdbc
-        .sql(
-            """
-            UPDATE users SET role = :role WHERE id = :id
-            RETURNING id, email, role
-            """,
-        )
-        .param("role", role)
-        .param("id", id)
-        .query(RoleRow::class.java)
-        .optional()
-        .orElse(null)
-
-    /** @return rows deleted (0 → no such user). */
-    fun deleteById(id: Int): Int = jdbc
-        .sql("DELETE FROM users WHERE id = :id")
-        .param("id", id)
-        .update()
-
     /**
-     * Staff see clients and other staff — admin accounts aren't theirs to
-     * manage. Admin sees everyone.
+     * Every user, each with the billing roles they hold.
+     *
+     * Not scoped to a practice yet. `users` carries no practice of its own, so
+     * the only link to one is a role assignment, and an account an administrator
+     * has just created has none. Scoping this list means deciding how an account
+     * belongs to a practice, which is its own piece of work.
      *
      * The billing roles come along as one aggregated column rather than a query
      * per row, since the screen shows a page of them at once. Both the role and
      * the assignment have to be active to count, the same rule the permission
      * lookup applies, so the list can't claim a role that grants nothing.
      */
-    fun list(includeAdminAccounts: Boolean): List<ListItem> {
-        val filter = if (includeAdminAccounts) "" else " WHERE role IN ('client', 'staff')"
+    fun list(): List<ListItem> {
         // Explicit row mapper so created_at is normalised to UTC before it is
         // serialised, whatever offset the driver hands back.
         return jdbc
             .sql(
                 """
-                SELECT id, email, role,
+                SELECT id, email,
                        email_verified AS "emailVerified",
                        created_at     AS "createdAt",
                        COALESCE(
@@ -327,7 +305,7 @@ class UserRepository(private val jdbc: JdbcClient) {
                             WHERE a.user_id = users.id AND a.active),
                            ''
                        ) AS "roleCodes"
-                FROM users$filter
+                FROM users
                 ORDER BY created_at ASC
                 """,
             )
@@ -336,7 +314,6 @@ class UserRepository(private val jdbc: JdbcClient) {
                     ListItem(
                         rs.getInt("id"),
                         rs.getString("email"),
-                        rs.getString("role"),
                         rs.getBoolean("emailVerified"),
                         rs.getObject("createdAt", OffsetDateTime::class.java).toInstant(),
                         rs.getString("roleCodes").split(',').filter { it.isNotEmpty() },
@@ -345,4 +322,9 @@ class UserRepository(private val jdbc: JdbcClient) {
             )
             .list()
     }
+    /** @return rows deleted (0 → no such user). */
+    fun deleteById(id: Int): Int = jdbc
+        .sql("DELETE FROM users WHERE id = :id")
+        .param("id", id)
+        .update()
 }

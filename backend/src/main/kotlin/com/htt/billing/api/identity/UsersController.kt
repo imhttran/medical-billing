@@ -1,10 +1,12 @@
 package com.htt.billing.api.identity
 
 import com.htt.billing.common.Api
+import com.htt.billing.common.ApiRejection
 import com.htt.billing.common.error.ValidationException
 import com.htt.billing.identity.AuthUser
-import com.htt.billing.identity.Roles
+import com.htt.billing.security.Permissions
 import com.htt.billing.service.identity.UserAdminService
+import com.htt.billing.service.security.AuthorizationService
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -17,19 +19,22 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * Staff/admin user management. The role gate runs before the path id is parsed,
- * because that is the order the original checked them in.
+ * Staff/admin user management. The permission gate runs before the path id is
+ * parsed, because that is the order the original checked them in.
  */
 @RestController
 @RequestMapping("/api/users")
-class UsersController(private val admin: UserAdminService) {
+class UsersController(
+    private val admin: UserAdminService,
+    private val authorization: AuthorizationService,
+) {
 
     @GetMapping
     fun listUsers(user: AuthUser): ResponseEntity<Any> {
-        Api.requireRole(user, "staff")
+        require(user, Permissions.USER_VIEW)
         return Api.respond(
             HttpStatus.OK,
-            mapOf("users" to admin.listUsers(Roles.hasRole(user.role, "admin"))),
+            mapOf("users" to admin.listUsers()),
         )
     }
 
@@ -38,7 +43,7 @@ class UsersController(private val admin: UserAdminService) {
         user: AuthUser,
         @RequestBody(required = false) body: ByteArray?,
     ): ResponseEntity<Any> {
-        Api.requireRole(user, "admin")
+        require(user, Permissions.USER_CREATE)
         val request = Api.decode(body, CreateUserBody::class.java)
         val created = admin.createUser(request.email, request.password)
         return Api.respond(
@@ -49,7 +54,6 @@ class UsersController(private val admin: UserAdminService) {
                 "user" to mapOf(
                     "id" to created.id,
                     "email" to created.email,
-                    "role" to created.role,
                     "emailVerified" to created.emailVerified,
                 ),
             ),
@@ -58,7 +62,7 @@ class UsersController(private val admin: UserAdminService) {
 
     @DeleteMapping("/{id}")
     fun deleteUser(user: AuthUser, @PathVariable("id") id: String): ResponseEntity<Any> {
-        Api.requireRole(user, "admin")
+        require(user, Permissions.USER_DISABLE)
         val userId = Api.parseId(id)
         try {
             admin.deleteUser(user.id, userId)
@@ -74,7 +78,7 @@ class UsersController(private val admin: UserAdminService) {
         @PathVariable("id") id: String,
         @RequestBody(required = false) body: ByteArray?,
     ): ResponseEntity<Any> {
-        Api.requireRole(user, "admin")
+        require(user, Permissions.USER_EDIT)
         val userId = Api.parseId(id)
         // Decoded loosely: a present-but-non-boolean value (string, number)
         // reads as not-a-boolean.
@@ -97,37 +101,9 @@ class UsersController(private val admin: UserAdminService) {
         )
     }
 
-    @PatchMapping("/{id}/role")
-    fun patchRole(
-        user: AuthUser,
-        @PathVariable("id") id: String,
-        @RequestBody(required = false) body: ByteArray?,
-    ): ResponseEntity<Any> {
-        Api.requireRole(user, "admin")
-        val userId = Api.parseId(id)
-        val request = Api.decode(body, PatchRoleBody::class.java)
-        val updated = try {
-            admin.setRole(user.id, userId, request.role)
-        } catch (rejected: ValidationException) {
-            return Api.respond(HttpStatus.BAD_REQUEST, Api.msg(rejected.message))
-        }
-        return Api.respond(
-            HttpStatus.OK,
-            mapOf(
-                "success" to true,
-                "message" to "User role updated",
-                "user" to mapOf(
-                    "id" to updated.id,
-                    "email" to updated.email,
-                    "role" to updated.role,
-                ),
-            ),
-        )
-    }
-
     @PostMapping("/{id}/resend-verification")
     fun resendVerification(user: AuthUser, @PathVariable("id") id: String): ResponseEntity<Any> {
-        Api.requireRole(user, "staff")
+        require(user, Permissions.USER_EDIT)
         val userId = Api.parseId(id)
         try {
             admin.resendVerification(userId)
@@ -145,7 +121,7 @@ class UsersController(private val admin: UserAdminService) {
 
     @PostMapping("/{id}/reset-password")
     fun resetPassword(user: AuthUser, @PathVariable("id") id: String): ResponseEntity<Any> {
-        Api.requireRole(user, "admin")
+        require(user, Permissions.USER_RESET_PASSWORD)
         admin.resetPassword(Api.parseId(id))
         return Api.respond(
             HttpStatus.OK,
@@ -154,5 +130,18 @@ class UsersController(private val admin: UserAdminService) {
                 "message" to "Password reset email sent",
             ),
         )
+    }
+
+    /**
+     * The same refusal [AuthorizationService.require] would give, spelled here
+     * because these checks answer before the path id is parsed.
+     */
+    private fun require(user: AuthUser, permission: String) {
+        if (!authorization.holds(user.id, permission)) {
+            throw ApiRejection(
+                HttpStatus.FORBIDDEN,
+                Api.msg(AuthorizationService.missingPermission(permission)),
+            )
+        }
     }
 }

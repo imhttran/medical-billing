@@ -7,7 +7,6 @@ package com.htt.billing.identity
 data class AuthUser(
     val id: Int,
     val email: String,
-    val role: String,
     val emailVerified: Boolean,
     val mustChangePassword: Boolean,
     val hasProfile: Boolean,

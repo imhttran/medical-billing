@@ -11,7 +11,7 @@ import {
   type ReactEventHandler,
 } from "react";
 import { callApi, getJson } from "@/lib/api";
-import { ROLES, hasRole } from "@/lib/roles";
+import { allows, useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
 import { PageTitle } from "@/components/PageTitle";
@@ -23,27 +23,26 @@ const yesNo = (value: boolean) => (value ? "Yes" : "No");
 type MeUser = {
   id: number;
   email: string;
-  role: string;
   emailVerified: boolean;
   mustChangePassword?: boolean;
   hasProfile?: boolean;
+  /** The billing roles this account holds. */
+  roles?: string[];
   permissions?: string[];
 };
 
 type UserRow = {
   id: number;
   email: string;
-  role: string;
   emailVerified: boolean;
   roleCodes?: string[];
 };
 
-type SortKey = "email" | "role" | "emailVerified";
+type SortKey = "email" | "emailVerified";
 type SortDir = "asc" | "desc";
 
 const SORTABLE_COLUMNS: { key: SortKey; label: string }[] = [
   { key: "email", label: "Email" },
-  { key: "role", label: "Role" },
   { key: "emailVerified", label: "Verified" },
 ];
 
@@ -144,8 +143,13 @@ export default function DashboardPage() {
   const [page, setPage] = useState(1);
   const addUserDetailsRef = useRef<HTMLDetailsElement>(null);
 
-  const isAdmin = me ? hasRole(me.role, "admin") : false;
-  const isStaff = me ? hasRole(me.role, "staff") : false;
+  // What this account may do with other accounts, one permission at a time.
+  const canViewUsers = allows(me, "USER_VIEW");
+  const canCreateUser = allows(me, "USER_CREATE");
+  const canEditUser = allows(me, "USER_EDIT");
+  const canResetPassword = allows(me, "USER_RESET_PASSWORD");
+  const canDisableUser = allows(me, "USER_DISABLE");
+  const canAnyUserAction = canEditUser || canResetPassword || canDisableUser;
 
   const loadUsers = useCallback(async (authToken: string) => {
     const { ok, data } = await getJson<{ users?: UserRow[] }>(
@@ -195,8 +199,8 @@ export default function DashboardPage() {
         }
         setMe(user);
 
-        // Only staff/admin can list users at all (backend enforces this too).
-        if (hasRole(user.role, "staff")) await loadUsers(stored);
+        // Listing users is USER_VIEW, which the four billing roles don't hold.
+        if (allows(user, "USER_VIEW")) await loadUsers(stored);
       } catch {
         window.location.href = "/";
       }
@@ -276,7 +280,9 @@ export default function DashboardPage() {
 
   return (
     <div
-      className={isStaff ? "dashboard-container wide" : "dashboard-container"}
+      className={
+        canViewUsers ? "dashboard-container wide" : "dashboard-container"
+      }
     >
       <PageTitle title="Dashboard | Medical Billing" />
       <PageHeader
@@ -299,10 +305,10 @@ export default function DashboardPage() {
       </PageHeader>
 
       <div className="dashboard-card">
-        {isStaff && (
+        {canViewUsers && (
           <div className="user-list-section">
             <h2>Users</h2>
-            {isAdmin && (
+            {canCreateUser && (
               <details ref={addUserDetailsRef}>
                 <summary className="add-user-toggle">Add User</summary>
                 <form
@@ -350,7 +356,10 @@ export default function DashboardPage() {
                           : ""}
                       </th>
                     ))}
-                    <th style={isAdmin ? undefined : { display: "none" }}>
+                    <th>Roles</th>
+                    <th
+                      style={canAnyUserAction ? undefined : { display: "none" }}
+                    >
                       Actions
                     </th>
                   </tr>
@@ -363,7 +372,7 @@ export default function DashboardPage() {
                   ) : (
                     pageUsers.map((user) => {
                       const actions: TableAction[] = [];
-                      if (!user.emailVerified) {
+                      if (!user.emailVerified && canEditUser) {
                         actions.push({
                           label: "Resend Verification",
                           onClick: () =>
@@ -376,7 +385,7 @@ export default function DashboardPage() {
                             ),
                         });
                       }
-                      if (isAdmin) {
+                      if (canEditUser) {
                         actions.push({
                           label: user.emailVerified ? "Unverify" : "Verify",
                           onClick: () =>
@@ -390,6 +399,8 @@ export default function DashboardPage() {
                               await loadUsers(authToken);
                             }),
                         });
+                      }
+                      if (canResetPassword) {
                         actions.push({
                           label: "Reset Password",
                           onClick: () =>
@@ -401,6 +412,8 @@ export default function DashboardPage() {
                               ).then(() => undefined),
                             ),
                         });
+                      }
+                      if (canDisableUser) {
                         actions.push({
                           label: "Delete",
                           danger: true,
@@ -423,46 +436,13 @@ export default function DashboardPage() {
                         <tr key={user.id}>
                           <td>{user.email}</td>
                           <td>
-                            {/* Admins get an editable dropdown (except on their
-                                own row — the backend also blocks self-demotion,
-                                but disabling here skips the round trip). */}
-                            {isAdmin && user.id !== me?.id ? (
-                              <select
-                                key={user.role}
-                                defaultValue={user.role}
-                                onChange={(
-                                  event: ChangeEvent<HTMLSelectElement>,
-                                ) =>
-                                  withToken(async (authToken) => {
-                                    await callApi(
-                                      authToken,
-                                      `/api/users/${user.id}/role`,
-                                      "PATCH",
-                                      { role: event.target.value },
-                                    );
-                                    await loadUsers(authToken);
-                                  })
-                                }
-                              >
-                                {ROLES.map((role) => (
-                                  <option key={role} value={role}>
-                                    {role}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              user.role
-                            )}
-                            {/* The dropdown above is the legacy ranked column,
-                                which only decides who reaches this screen. What
-                                a user may actually do is these codes, so they
-                                belong beside it rather than in a column of
-                                their own that would widen the table. */}
-                            {user.roleCodes?.length ? (
-                              <p className="role-codes">
-                                {user.roleCodes.join(", ")}
-                              </p>
-                            ) : null}
+                            {/* What the account may do, which is the whole of
+                                its identity now. The editable ranked picker
+                                that used to sit here is gone — it wrote a
+                                column that granted nothing. */}
+                            {user.roleCodes?.length
+                              ? user.roleCodes.join(", ")
+                              : "—"}
                           </td>
                           <td>{yesNo(user.emailVerified)}</td>
                           <td>
@@ -503,9 +483,9 @@ export default function DashboardPage() {
       <PageFooter
         meta={
           <span>
-            Role:{" "}
+            Roles:{" "}
             <span id="user-role" className="highlight">
-              {me?.role ?? "..."}
+              {me?.roles?.length ? me.roles.join(", ") : "none"}
             </span>{" "}
             · Email verified:{" "}
             <span id="user-verified" className="highlight">

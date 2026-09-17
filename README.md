@@ -100,17 +100,17 @@ database.
 
 ## Roles
 
-`client` < `staff` < `admin`. Grant via CLI only:
+Every account's identity is the billing roles it holds, and those are the only
+thing that grants anything. A practice administrator manages users, claims and
+patients in one practice. A billing manager runs the billing workflow. A biller
+works claims without void or assignment. A provider documents encounters. A
+read-only account reads without changing. A platform administrator runs the
+platform and holds no practice content at all.
 
-```bash
-make role EMAIL=you@email.com ROLE=admin
-# or: ./manage.sh role you@email.com admin
-```
-
-That is the platform gate the original endpoints use. Billing has its own
-authorization layer beside it: permissions held through organization-scoped
-role assignments, checked server-side. A practice-A user cannot read or mutate a
-practice-B record. See **[docs/FEATURE.md](docs/FEATURE.md)**.
+Roles are granted through organization-scoped assignments rather than a column on
+the user row, and the permission matrix in **[docs/FEATURE.md](docs/FEATURE.md)**
+is the reference for what each one may do. A practice-A user cannot read or mutate
+a practice-B record.
 
 ## Backend
 

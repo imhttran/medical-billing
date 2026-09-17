@@ -1,11 +1,13 @@
 package com.htt.billing.identity
 
 import com.htt.billing.demo.DemoDataset
+import com.htt.billing.security.RoleCodes
 import com.htt.billing.support.NoScheduledEmailWorker
 import com.htt.billing.support.TestEnv
 import java.util.function.Supplier
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
@@ -20,8 +22,8 @@ import org.springframework.test.context.DynamicPropertySource
 
 /**
  * Development creates (and re-creates idempotently) one login per billing role,
- * each with a pre-filled profile, so local dev needs no manual set-role and a
- * demo can move between accounts.
+ * each with a pre-filled profile, so local dev needs no manual grant and a demo
+ * can move between accounts.
  *
  * Its own context, because the seed only runs when app.env is development —
  * every other test here runs with app.env=test precisely so it doesn't.
@@ -71,51 +73,21 @@ class DevUserSeedTest {
         seeder.run(DefaultApplicationArguments())
 
         DemoDataset.DEV_TEAM.forEach { member ->
-            assertEquals(
-                member.coarseRole,
-                coarseRoleOf(member.email),
-                "${member.email} should carry the coarse role its billing role implies",
-            )
-            assertTrue(hasProfile(member.email), "${member.email} should have a profile")
+            assertNotNull(userIdOf(member.email)) { "${member.email} was not seeded" }
+            assertTrue(hasProfile(member.email)) { "${member.email} should have a profile" }
         }
     }
 
     @Test
     fun coversEveryBillingRoleAndNothingElse() {
         // The point of the team: each role the matrix describes can be logged into.
-        val covered = DemoDataset.DEV_TEAM.flatMap { it.billingRoles }.toSet()
-        assertEquals(
-            setOf(
-                "PLATFORM_ADMIN",
-                "PRACTICE_ADMIN",
-                "BILLING_MANAGER",
-                "BILLER",
-                "PROVIDER",
-                "READ_ONLY",
-            ),
-            covered,
-        )
+        assertEquals(RoleCodes.ALL, DemoDataset.DEV_TEAM.flatMap { it.billingRoles }.toSet())
     }
 
-    @Test
-    fun onlyUserAdministratorsTakeAdmin() {
-        // users.role gates /api/users. The four billing roles hold no USER_*
-        // permission, so a coarse admin would hand them a screen the matrix denies.
-        val userAdministrators = setOf("PLATFORM_ADMIN", "PRACTICE_ADMIN")
-        DemoDataset.DEV_TEAM.forEach { member ->
-            val expected = if (member.billingRoles.any { it in userAdministrators }) {
-                "admin"
-            } else {
-                "client"
-            }
-            assertEquals(expected, member.coarseRole, "${member.email}")
-        }
-    }
-
-    private fun coarseRoleOf(email: String): String? = jdbc
-        .sql("SELECT role FROM users WHERE email = :email")
+    private fun userIdOf(email: String): Int? = jdbc
+        .sql("SELECT id FROM users WHERE email = :email")
         .param("email", email)
-        .query(String::class.java)
+        .query(Int::class.javaObjectType)
         .optional()
         .orElse(null)
 

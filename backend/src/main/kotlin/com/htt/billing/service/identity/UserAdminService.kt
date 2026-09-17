@@ -6,7 +6,6 @@ import com.htt.billing.common.error.ServerErrorException
 import com.htt.billing.common.error.ValidationException
 import com.htt.billing.identity.EmailTemplates.Email
 import com.htt.billing.identity.PasswordHasher
-import com.htt.billing.identity.Roles
 import com.htt.billing.identity.Validators
 import com.htt.billing.repository.identity.LoginCodeRepository.Resend
 import com.htt.billing.repository.identity.UserRepository
@@ -31,9 +30,9 @@ class UserAdminService(
     private val hasher: PasswordHasher,
 ) {
 
-    /** Staff see clients and other staff; admin sees everyone. */
-    fun listUsers(includeAdminAccounts: Boolean): List<UserRepository.ListItem> = try {
-        users.list(includeAdminAccounts)
+    /** Every user, each with the billing roles they hold. */
+    fun listUsers(): List<UserRepository.ListItem> = try {
+        users.list()
     } catch (failed: DataAccessException) {
         throw ServerErrorException("List Users Error", failed, false)
     }
@@ -82,24 +81,6 @@ class UserAdminService(
         users.updateVerification(id, verified) ?: throw NotFoundException("User not found")
     } catch (failed: DataAccessException) {
         throw ServerErrorException("Update Verification Error", failed, false)
-    }
-
-    /**
-     * Admin-only: changes a user's role. Blocks self-demotion so an admin can't
-     * lock themselves (and potentially every other admin) out of admin routes.
-     */
-    fun setRole(requesterId: Int, id: Int, role: String): UserRepository.RoleRow {
-        if (!Roles.isRole(role)) {
-            throw ValidationException("role must be one of: " + Roles.ROLES.joinToString(", "))
-        }
-        if (id == requesterId) {
-            throw ValidationException("Cannot change your own role")
-        }
-        return try {
-            users.updateRole(id, role) ?: throw NotFoundException("User not found")
-        } catch (failed: DataAccessException) {
-            throw ServerErrorException("Update Role Error", failed, false)
-        }
     }
 
     /**

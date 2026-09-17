@@ -233,13 +233,6 @@ format_code() {
   (cd "$ROOT_DIR/frontend" && npm run format)
 }
 
-# Build the jar, then run the CLI: it reads DATABASE_URL directly and ignores
-# .env files, matching the subcommand it replaces.
-set_user_role_for() {
-  local email="$1" role="$2"
-  (cd "$ROOT_DIR/$BACKEND_DIR" && ./gradlew bootJar -q && java -jar build/libs/app.jar set-role "$email" "$role") || return 1
-}
-
 # Destructive steps ask for a typed 'yes'; --yes skips the prompt so a script
 # (or `make db-reset YES=1`) can run them unattended. Declining is a failure, so
 # callers can tell "aborted" from "done".
@@ -346,7 +339,6 @@ Work
   test                              backend tests + frontend build
   build                             API jar + frontend production bundle
   fmt                               prettier --write
-  role <email> <role>               set a role (client|staff|admin)
   db:reset [--yes]                  drop and recreate the schema
   db:reseed [--yes]                 drop the schema, restart the backend
 
@@ -381,13 +373,6 @@ case "${1:-}" in
   compose:down)   step compose_down ;;
   compose:build)  step compose_build ;;
   compose:logs)   step compose_logs "${2:-}" ;;
-  role)
-    if [ -z "${2:-}" ] || [ -z "${3:-}" ]; then
-      echo -e "${YELLOW}Usage: ./manage.sh role <email> <client|staff|admin>${NC}"
-      exit 2
-    fi
-    step set_user_role_for "$2" "$3"
-    ;;
   *)
     echo -e "${YELLOW}Unknown subcommand: $1${NC}"
     usage

@@ -76,7 +76,6 @@ class AuthService(
         return AuthUser(
             account.id,
             account.email,
-            account.role,
             account.emailVerified,
             account.mustChangePassword,
             account.hasProfile,

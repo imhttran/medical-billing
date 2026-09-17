@@ -12,17 +12,15 @@
 SHELL := /bin/sh
 
 # Target arguments:
-#   make role EMAIL=you@mail.com ROLE=admin
 #   make logs WHAT=api
 #   make db-reset YES=1
 EMAIL ?=
-ROLE ?=
 WHAT ?=
 YES ?=
 YESFLAG := $(if $(filter 1,$(YES)),--yes,)
 
 .PHONY: help up down logs compose-build status setup test build fmt \
-        native-up native-down native-backend native-frontend native-logs role \
+        native-up native-down native-backend native-frontend native-logs \
         db-reset db-reseed
 
 help: ## Show this help
@@ -69,9 +67,6 @@ build: ## Build the API jar (build/libs/app.jar) and the frontend bundle
 
 fmt: ## Format with prettier
 	./manage.sh fmt
-
-role: ## Set a role: make role EMAIL=you@mail.com ROLE=admin
-	./manage.sh role $(EMAIL) $(ROLE)
 
 db-reset: ## Native: drop and recreate the schema (YES=1 skips the confirmation)
 	./manage.sh db:reset $(YESFLAG)

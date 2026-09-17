@@ -5,15 +5,17 @@
   hashing, email verification, password
   reset, resend-verification, self-service change-password, email-code 2FA on
   new devices (trusted devices skip it)
-- **RBAC** — `client` < `staff` < `admin` roles with role-gated routes;
-  promotion is CLI-only so there's no self-service escalation
-- **Billing RBAC** — permissions held through organization-scoped role
+- **RBAC** — permissions held through organization-scoped role
   assignments (`PLATFORM_ADMIN`, `PRACTICE_ADMIN`, `BILLING_MANAGER`, `BILLER`,
   `PROVIDER`, `READ_ONLY`), enforced server-side against the organization that
   owns the record. Platform administration holds no patient or claim permission,
   so it cannot reach practice content. Role assignments are audited. A practice
   administrator works claims as well as managing users, since in a small
   practice the same person does both
+- **One identity per account** — the roles an account holds are the whole of what
+  it is and the only thing that grants anything. The ranked
+  `client`/`staff`/`admin` column that predated RBAC is gone, along with the CLI
+  and the role picker that wrote it
 - **Audit trail** — role assignments, demo resets, claim submissions and patient
   payments are recorded in the same transaction as the act, and the work queue
   records its assignments and resolutions. `GET /api/audit-events` reads them
@@ -103,14 +105,17 @@
 
 ## Permission matrix
 
-Two different things on a user row are called a role, and only one of them
-grants anything. `users.role` is a legacy ranked column, `client` below
-`staff` below `admin`, and it gates exactly one screen, the user list at
-`/api/users`. Everything else in the matrix below hangs off
-`user_role_assignments`, so an account can be a `client` and still hold
-`BILLING_MANAGER`, or carry `admin` and hold no practice content at all. The
-users screen shows both, the ranked one as the editable picker and the billing
-ones beneath it.
+A role here means a billing role, held through an assignment in
+`user_role_assignments`. That is the only thing that grants anything. The
+`users` row itself used to carry a ranked `client`/`staff`/`admin` column beside
+it, and it is gone, because every value it could take was either implied by a
+grant or contradicted by one. `staff` was the clearest case. Any role allowed to
+read the user list was also allowed to change it, which makes it an
+administrator, so the middle rung had no one left to hold it.
+
+Administration of users is the one thing not scoped to a practice yet, because a
+`users` row carries no practice of its own and the only link to one is an
+assignment, which a freshly created account does not have.
 
 The V1 matrix, reviewed and settled in Milestone 8. `PermissionMatrixTest` holds
 it to the rules the review set: platform administration carries no practice

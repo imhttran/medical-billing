@@ -10,12 +10,17 @@ export type SessionUser = {
   emailVerified: boolean;
   mustChangePassword?: boolean;
   hasProfile?: boolean;
+  /** The billing roles this account holds. */
+  roles?: string[];
   /**
    * Billing permission codes. The nav gates its destinations on these, and every
    * write control asks before it renders.
    */
   permissions?: string[];
 };
+
+/** The part of a session [allows] needs, so a page's own user shape fits too. */
+export type PermissionHolder = { permissions?: string[] };
 
 /**
  * Whether the caller holds a billing permission.
@@ -31,7 +36,10 @@ export type SessionUser = {
  * and the answer is no. A missing action is recoverable, an action that always
  * fails reads as a broken screen.
  */
-export function allows(user: SessionUser | null, permission: string): boolean {
+export function allows(
+  user: PermissionHolder | null,
+  permission: string,
+): boolean {
   return user?.permissions?.includes(permission) ?? false;
 }
 

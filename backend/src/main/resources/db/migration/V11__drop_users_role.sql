@@ -1,0 +1,14 @@
+-- The ranked `client`/`staff`/`admin` column goes.
+--
+-- It predated RBAC and by the end it gated exactly one screen, the user list.
+-- The permission matrix already says who may administer users — `USER_VIEW`,
+-- `USER_CREATE`, `USER_EDIT`, `USER_DISABLE`, `USER_RESET_PASSWORD` — and holds
+-- that only the two administrator roles do, so every value this column could take
+-- was either implied by a grant or contradicted by one. `staff`, the middle rung,
+-- was unoccupiable: any role allowed to read the list was also allowed to change
+-- it, which makes it an administrator.
+--
+-- `PATCH /api/users/{id}/role` went with it. Assigning a billing role is an
+-- authorized action the app has an implementation for in RoleAdminService and no
+-- route for, which is a separate gap.
+ALTER TABLE users DROP COLUMN IF EXISTS role;
