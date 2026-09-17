@@ -1,11 +1,12 @@
 package com.htt.billing.claim
 
-import com.htt.billing.coding.CodingRepository
-import com.htt.billing.coverage.CoverageRepository
-import com.htt.billing.coverage.PayerRepository
 import com.htt.billing.common.error.ValidationException
-import com.htt.billing.patient.PatientRepository
-import com.htt.billing.practice.ProviderRepository
+import com.htt.billing.repository.claim.ClaimRepository
+import com.htt.billing.repository.coding.CodingRepository
+import com.htt.billing.repository.coverage.CoverageRepository
+import com.htt.billing.repository.coverage.PayerRepository
+import com.htt.billing.repository.patient.PatientRepository
+import com.htt.billing.repository.practice.ProviderRepository
 import org.springframework.stereotype.Component
 
 /**

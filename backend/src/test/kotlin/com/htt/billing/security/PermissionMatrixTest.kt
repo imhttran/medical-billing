@@ -1,5 +1,6 @@
 package com.htt.billing.security
 
+import com.htt.billing.repository.security.RbacRepository
 import com.htt.billing.support.BillingApiTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse

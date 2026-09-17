@@ -1,9 +1,10 @@
 package com.htt.billing.audit
 
-import com.htt.billing.claim.ClaimService
-import com.htt.billing.payment.PaymentService
-import com.htt.billing.security.RoleAdminService
 import com.htt.billing.security.RoleCodes
+import com.htt.billing.service.audit.AuditService
+import com.htt.billing.service.claim.ClaimService
+import com.htt.billing.service.payment.PaymentService
+import com.htt.billing.service.security.RoleAdminService
 import com.htt.billing.support.BillingApiTest
 import com.htt.billing.support.TestEnv
 import com.htt.billing.support.assertStatus

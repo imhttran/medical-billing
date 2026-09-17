@@ -1,6 +1,6 @@
 package com.htt.billing.identity
 
-import com.htt.billing.identity.EmailQueueService
+import com.htt.billing.service.identity.EmailQueueService
 import com.htt.billing.support.IntegrationTest
 import com.htt.billing.support.NoScheduledEmailWorker
 import org.junit.jupiter.api.Assertions.assertEquals

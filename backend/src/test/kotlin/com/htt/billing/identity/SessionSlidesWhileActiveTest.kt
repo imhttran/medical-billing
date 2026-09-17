@@ -1,6 +1,6 @@
 package com.htt.billing.identity
 
-import com.htt.billing.identity.JwtService
+import com.htt.billing.service.identity.JwtService
 import com.htt.billing.support.IntegrationTest
 import com.htt.billing.support.assertStatus
 import org.junit.jupiter.api.Assertions.assertNotEquals

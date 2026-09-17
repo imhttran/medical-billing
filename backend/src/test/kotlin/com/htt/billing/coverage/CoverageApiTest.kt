@@ -1,5 +1,6 @@
 package com.htt.billing.coverage
 
+import com.htt.billing.repository.coverage.CoverageRepository.Coverage
 import com.htt.billing.security.RoleCodes
 import com.htt.billing.support.BillingApiTest
 import com.htt.billing.support.assertStatus

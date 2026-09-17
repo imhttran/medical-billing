@@ -1,7 +1,7 @@
 package com.htt.billing.support
 
-import com.htt.billing.practice.OrganizationRepository
-import com.htt.billing.practice.OrganizationRepository.Organization
+import com.htt.billing.repository.practice.OrganizationRepository
+import com.htt.billing.repository.practice.OrganizationRepository.Organization
 import java.sql.Types
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach

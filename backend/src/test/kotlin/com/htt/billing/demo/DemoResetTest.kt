@@ -2,6 +2,7 @@ package com.htt.billing.demo
 
 import com.htt.billing.common.error.ForbiddenException
 import com.htt.billing.security.RoleCodes
+import com.htt.billing.service.demo.DemoResetService
 import com.htt.billing.support.BillingApiTest
 import com.htt.billing.support.assertStatus
 import org.junit.jupiter.api.AfterEach

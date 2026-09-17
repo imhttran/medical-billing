@@ -1,5 +1,6 @@
 package com.htt.billing.patient
 
+import com.htt.billing.repository.patient.PatientRepository.Patient
 import com.htt.billing.security.RoleCodes
 import com.htt.billing.support.BillingApiTest
 import com.htt.billing.support.assertStatus

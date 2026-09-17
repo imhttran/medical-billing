@@ -1,10 +1,8 @@
 package com.htt.billing.identity
 
 import com.htt.billing.common.config.AppProperties
-import com.htt.billing.identity.Profile
-import com.htt.billing.identity.ProfileRepository
-import com.htt.billing.identity.UserRepository
-import com.htt.billing.identity.PasswordHasher
+import com.htt.billing.repository.identity.ProfileRepository
+import com.htt.billing.repository.identity.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner

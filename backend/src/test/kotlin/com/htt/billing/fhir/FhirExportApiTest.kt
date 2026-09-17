@@ -2,6 +2,7 @@ package com.htt.billing.fhir
 
 import com.htt.billing.claim.ClaimStatus
 import com.htt.billing.security.RoleCodes
+import com.htt.billing.service.fhir.FhirExportService
 import com.htt.billing.support.BillingApiTest
 import com.htt.billing.support.TestEnv
 import com.htt.billing.support.assertStatus

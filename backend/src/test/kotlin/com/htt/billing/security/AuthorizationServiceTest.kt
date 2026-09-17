@@ -1,6 +1,7 @@
 package com.htt.billing.security
 
-import com.htt.billing.security.RbacRepository.Grant
+import com.htt.billing.repository.security.RbacRepository.Grant
+import com.htt.billing.service.security.AuthorizationService
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test

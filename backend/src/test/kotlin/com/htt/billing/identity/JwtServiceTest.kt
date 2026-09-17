@@ -1,6 +1,7 @@
 package com.htt.billing.identity
 
 import com.htt.billing.common.config.AppProperties
+import com.htt.billing.service.identity.JwtService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull

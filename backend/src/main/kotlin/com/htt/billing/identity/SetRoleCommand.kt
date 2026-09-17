@@ -1,7 +1,6 @@
 package com.htt.billing.identity
 
 import com.htt.billing.common.config.DatabaseUrl
-import com.htt.billing.identity.Roles
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.SQLException

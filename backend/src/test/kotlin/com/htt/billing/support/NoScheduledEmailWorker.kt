@@ -1,7 +1,7 @@
 package com.htt.billing.support
 
-import com.htt.billing.identity.EmailQueueService
 import com.htt.billing.identity.EmailWorker
+import com.htt.billing.service.identity.EmailQueueService
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 

@@ -1,6 +1,6 @@
 package com.htt.billing.identity
 
-import com.htt.billing.identity.JwtService
+import com.htt.billing.service.identity.JwtService
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse

@@ -2,10 +2,9 @@ package com.htt.billing.identity
 
 import com.htt.billing.common.Api
 import com.htt.billing.common.ApiRejection
-import com.htt.billing.identity.AuthService
-import com.htt.billing.identity.AuthUser
 import com.htt.billing.common.error.ForbiddenException
 import com.htt.billing.common.error.NotFoundException
+import com.htt.billing.service.identity.AuthService
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.core.MethodParameter
 import org.springframework.http.HttpStatus

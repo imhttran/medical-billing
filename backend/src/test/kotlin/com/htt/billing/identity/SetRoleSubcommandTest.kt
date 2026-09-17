@@ -1,12 +1,11 @@
 package com.htt.billing.identity
 
-import com.htt.billing.identity.SetRoleCommand
 import com.htt.billing.support.IntegrationTest
+import javax.sql.DataSource
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.springframework.beans.factory.annotation.Autowired
-import javax.sql.DataSource
 
 /**
  * The out-of-band role grant: valid roles update, unknown emails and invalid

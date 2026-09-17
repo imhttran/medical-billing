@@ -1,5 +1,6 @@
 package com.htt.billing.identity
 
+import com.htt.billing.repository.identity.LoginCodeRepository.Resend
 import com.htt.billing.support.IntegrationTest
 import com.htt.billing.support.assertJsonNotTrue
 import com.htt.billing.support.assertJsonTrue
