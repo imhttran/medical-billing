@@ -33,5 +33,5 @@ replay_pid*.log
 # Playwright MCP artifacts
 .playwright-mcp/
 
-
+# Demo video and its pipeline: the video lives on the issue, not in history.
 demo/
