@@ -93,14 +93,33 @@
   --card-shadow:
     0 1px 3px oklch(0 0 0 / 0.1), 0 1px 2px -1px oklch(0 0 0 / 0.1);
 
-  /* Auth shell: the reference's primary-50 into slate-50 page wash. No photo
-     anywhere, app screens stay a flat surface to work on. */
-  --bg-gradient: linear-gradient(
-    180deg,
-    var(--blue-100) 0%,
-    var(--slate-50) 60%,
-    var(--slate-50) 100%
-  );
+  /* Page wash. The reference's hero mesh, kept to the same layer order — three
+     tinted blobs over a pale blue diagonal, with a white highlight underneath
+     them and above the base. Alphas stay in the single digits on purpose. The
+     white cards have to keep reading as the surface, so this is a backdrop and
+     nothing more. */
+  --bg-gradient:
+    radial-gradient(
+      circle 600px at 15% 25%,
+      rgb(27 77 255 / 0.08) 0%,
+      transparent 70%
+    ),
+    radial-gradient(
+      circle 500px at 75% 10%,
+      rgb(0 188 125 / 0.06) 0%,
+      transparent 65%
+    ),
+    radial-gradient(
+      circle 400px at 90% 80%,
+      rgb(27 77 255 / 0.05) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      circle 300px at 50% 50%,
+      rgb(255 255 255 / 0.9) 0%,
+      transparent 70%
+    ),
+    linear-gradient(135deg, #eff6ff, rgb(10 225 255 / 0.04), #eef2ff);
 
   /* Brand mark — HTT Tiers, duet colorway */
   --logo-canopy: var(--blue-600);
@@ -135,12 +154,31 @@
     --focus-ring: rgba(61, 104, 255, 0.45);
     /* On dark, layered depth shadows are invisible. One white ring instead. */
     --card-shadow: 0 0 0 1px oklch(1 0 0 / 0.08);
-    --bg-gradient: linear-gradient(
-      180deg,
-      var(--slate-900) 0%,
-      var(--slate-950) 60%,
-      var(--slate-950) 100%
-    );
+    /* Same mesh on dark. The base goes slate-900 into slate-950 and the
+       highlight layer is dropped, since a white blob on slate reads as a
+       smudge rather than a lift. */
+    --bg-gradient:
+      radial-gradient(
+        circle 600px at 15% 25%,
+        rgb(27 77 255 / 0.16) 0%,
+        transparent 70%
+      ),
+      radial-gradient(
+        circle 500px at 75% 10%,
+        rgb(0 188 125 / 0.1) 0%,
+        transparent 65%
+      ),
+      radial-gradient(
+        circle 400px at 90% 80%,
+        rgb(61 104 255 / 0.12) 0%,
+        transparent 60%
+      ),
+      linear-gradient(
+        135deg,
+        var(--slate-900),
+        var(--slate-950) 50%,
+        var(--slate-900)
+      );
 
     /* Brand mark on dark surfaces: keep the blue, lighten the base */
     --logo-canopy: var(--blue-400);
@@ -166,6 +204,15 @@ textarea {
 body {
   font-family: var(--font-body);
   background-color: var(--bg-color);
+  /* The wash sits on the body so every screen gets it, not just the auth shell.
+     Fixed attachment pins the blobs to the viewport, so a long page scrolls
+     across a still backdrop instead of dragging the mesh off the top. The
+     percentages in --bg-gradient then resolve against the viewport, which is
+     what makes each screen frame the mesh the same way the reference's hero
+     does. Browsers that ignore fixed on the body (iOS Safari) just fall back to
+     the scrolling wash, which is the same thing only worse. */
+  background-image: var(--bg-gradient);
+  background-attachment: fixed;
   color: var(--text-color);
   /* The reference's body rhythm, 16px on a 24px line. */
   line-height: 1.5;
@@ -174,10 +221,10 @@ body {
 
 /* Login & Signup Styles */
 
-/* The auth shell. The page wash lives here and nowhere else, so the app screens
-   are a flat surface to work on. Centering lives here too, now that <body> is a
-   plain block — and min-height with flex centering, rather than a fixed
-   full-bleed box, keeps a tall form (2FA, sign-up) from clipping at the top. */
+/* The auth shell. It used to carry the wash itself, before the wash moved to
+   <body>. Centering lives here — min-height with flex centering, rather than a
+   fixed full-bleed box, keeps a tall form (2FA, sign-up) from clipping at the
+   top. */
 .login-container {
   width: 100%;
   min-height: 100vh;
@@ -186,7 +233,6 @@ body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background-image: var(--bg-gradient);
 }
 
 .login-form {
@@ -486,8 +532,8 @@ body {
   margin-left: auto;
 }
 
-/* The app shell. No photo, no card wrapper: the page is a flat surface with the
-   content held to a reading width, so tables and forms stay the subject. */
+/* The app shell. No photo, no card wrapper: the content is held to a reading
+   width on the body's wash, so tables and forms stay the subject. */
 .dashboard-container {
   width: 100%;
   max-width: 600px;
