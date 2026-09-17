@@ -17,8 +17,8 @@ import org.springframework.stereotype.Component
  * destroys what a developer has been working on; the destructive reset is the
  * endpoint, and it has to be asked for.
  *
- * After [com.htt.billing.identity.DevAdminSeeder], which it needs: the grant that
- * makes the practice visible goes to that account.
+ * After [com.htt.billing.identity.DevUserSeeder], which it needs: the grants that
+ * make the practice visible to the dev logins go to those accounts.
  */
 @Component
 @Order(1)

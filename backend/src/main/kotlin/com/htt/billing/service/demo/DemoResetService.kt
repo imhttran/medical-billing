@@ -4,7 +4,6 @@ import com.htt.billing.adjudication.PayerSimulator
 import com.htt.billing.claim.ClaimStatus
 import com.htt.billing.common.error.ServerErrorException
 import com.htt.billing.demo.DemoDataset
-import com.htt.billing.identity.DevAdminSeeder
 import com.htt.billing.repository.audit.AuditRepository
 import com.htt.billing.repository.claim.ClaimRepository
 import com.htt.billing.repository.claim.ClaimRepository.Claim
@@ -18,6 +17,7 @@ import com.htt.billing.repository.practice.OrganizationRepository
 import com.htt.billing.repository.practice.ProviderRepository
 import com.htt.billing.repository.security.RbacRepository
 import com.htt.billing.security.Permissions
+import com.htt.billing.security.ScopeTypes
 import com.htt.billing.service.adjudication.AdjudicationService
 import com.htt.billing.service.claim.ClaimService
 import com.htt.billing.service.payment.PaymentService
@@ -37,8 +37,8 @@ import org.springframework.transaction.support.TransactionTemplate
  * audit trail — those are configured, not synthetic, and erasing them would turn a
  * data reset into an environment wipe. The practice row itself survives for the
  * same reason: audit events point at it. The one thing it does write outside the
- * practice's billing records is the local login's role assignments, which is what
- * makes the seeded practice visible to it.
+ * practice's billing records is the local logins' role assignments, which is what
+ * makes the seeded practice visible to them.
  *
  * Claims go first. Everything a claim points at — its lines, its diagnoses, its
  * adjudications, its payments and its work items — cascades from the claim row,
@@ -97,9 +97,10 @@ class DemoResetService(
     fun seedIfAbsent(): Dataset? {
         val existing = organizations.findByName(DemoDataset.ORGANIZATION_NAME)
         if (existing != null && patients.countInOrganization(existing.id) > 0) {
-            // The data stays, but the grant is still ensured: it was added after
-            // some local databases had already been seeded, and it is idempotent.
-            grantDevAdminAccess(existing.id)
+            // The data stays, but the grants are still ensured: they were added
+            // after some local databases had already been seeded, and they are
+            // idempotent.
+            grantDevTeamAccess(existing.id)
             return null
         }
         var seeded: Dataset? = null
@@ -201,7 +202,7 @@ class DemoResetService(
             )
         }
 
-        grantDevAdminAccess(organizationId)
+        grantDevTeamAccess(organizationId)
 
         return Dataset(
             organizationId = organizationId,
@@ -385,17 +386,25 @@ class DemoResetService(
     )
 
     /**
-     * Makes the seeded practice usable by the local login. The dev admin is a
-     * platform account with no billing role, and the billing screens show nothing
+     * Makes the seeded practice usable by the local logins. Each dev account is a
+     * plain identity with no billing role, and the billing screens show nothing
      * without one — every query is scoped to the caller's grants. Granted here
      * rather than in the identity seeder so the two stay independent, and skipped
-     * when the account is absent (tests, qa, production).
+     * when an account is absent (tests, qa, production).
+     *
+     * A platform role is assigned with no organization, an organization role with
+     * this one. That pairing is what the tenant boundary is made of, so assigning
+     * PLATFORM_ADMIN against the practice would be wrong even though it would
+     * still resolve to the same permissions.
      */
-    private fun grantDevAdminAccess(organizationId: Int) {
-        val devAdminId = users.findIdByEmail(DevAdminSeeder.DEV_ADMIN_EMAIL) ?: return
-        DemoDataset.DEV_ADMIN_ROLES.forEach { roleCode ->
-            val role = rbac.findRoleByCode(roleCode) ?: return@forEach
-            rbac.insertAssignmentIfAbsent(devAdminId, role.id, organizationId, createdBy = null)
+    private fun grantDevTeamAccess(organizationId: Int) {
+        team@ for (member in DemoDataset.DEV_TEAM) {
+            val userId = users.findIdByEmail(member.email) ?: continue@team
+            roles@ for (roleCode in member.billingRoles) {
+                val role = rbac.findRoleByCode(roleCode) ?: continue@roles
+                val scope = if (role.scopeType == ScopeTypes.PLATFORM) null else organizationId
+                rbac.insertAssignmentIfAbsent(userId, role.id, scope, createdBy = null)
+            }
         }
     }
 

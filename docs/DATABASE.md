@@ -125,9 +125,11 @@ name, so an alias that drifts from the property name fails at runtime on that
 column rather than at compile time. The rest of the traps are
 listed in [BACKEND.md](BACKEND.md).
 
-Dev seed (`DevAdminSeeder`, only when `NODE_ENV=development`): upserts the dev
-admin (README has the credentials) plus their profile, so it isn't blocked by
-onboarding gates.
+Dev seed (`DevUserSeeder`, only when `NODE_ENV=development`): upserts one login
+per billing role (README has the credentials) plus their profiles, so none of
+them is blocked by the onboarding gates. `DemoResetService` grants each one its
+billing roles at the demo practice, pairing a platform role with no organization
+and an organization role with one.
 
 Demo data (`DemoDataSeeder`) runs right after it and lays down
 `DemoDataset`'s practice — ten patients with their coverages, three clinicians

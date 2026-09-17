@@ -1,5 +1,6 @@
 package com.htt.billing.demo
 
+import com.htt.billing.security.RoleCodes
 import java.time.LocalDate
 
 /**
@@ -31,14 +32,52 @@ object DemoDataset {
     const val SECONDARY_PAYER_CODE = "EXC001"
 
     /**
-     * What the local login is granted in the demo practice.
+     * What the local admin login is granted in the demo practice.
      *
      * Both roles, because one demo account has to be able to do everything the
      * screens offer: the practice admin manages users, and the billing manager
      * works claims, assigns and resolves queue items, takes payments and voids. A
-     * real deployment gives the two to different people.
+     * real deployment gives the two to different people, which the rest of
+     * [DEV_TEAM] exists to show.
      */
-    val DEV_ADMIN_ROLES: List<String> = listOf("PRACTICE_ADMIN", "BILLING_MANAGER")
+    val DEV_ADMIN_ROLES: List<String> =
+        listOf(RoleCodes.PRACTICE_ADMIN, RoleCodes.BILLING_MANAGER)
+
+    data class DemoUser(
+        val email: String,
+        val firstName: String,
+        val lastName: String,
+        /**
+         * `users.role`, the legacy ranked `client`/`staff`/`admin`. It now gates
+         * exactly one screen, `/api/users`, and nothing about billing. So it is
+         * set from whether the role administers users at all — the four billing
+         * roles hold no `USER_*` permission and take `client`.
+         */
+        val coarseRole: String,
+        /** Billing roles granted in the demo practice, from [RoleCodes]. */
+        val billingRoles: List<String>,
+    )
+
+    /**
+     * The logins a development boot creates, one per billing role, so the
+     * permission matrix can be shown by switching accounts rather than by reading
+     * the table in FEATURE.md. They all share one password (README has it), and
+     * all arrive verified with a filled profile, so none of them is stopped by
+     * the onboarding gates.
+     *
+     * The roles here are what the accounts are *granted*; the grants themselves
+     * are made per organization by [com.htt.billing.service.demo.DemoResetService],
+     * which is the only thing that knows the demo practice's id.
+     */
+    val DEV_TEAM: List<DemoUser> = listOf(
+        DemoUser("admin@mail.com", "Dev", "Admin", "admin", DEV_ADMIN_ROLES),
+        DemoUser("platform@mail.com", "Pat", "Nunez", "admin", listOf(RoleCodes.PLATFORM_ADMIN)),
+        DemoUser("manager@mail.com", "Morgan", "Wells", "client", listOf(RoleCodes.BILLING_MANAGER)),
+        DemoUser("biller@mail.com", "Bailey", "Ortiz", "client", listOf(RoleCodes.BILLER)),
+        // Named for the clinician the seeded claims already go out under.
+        DemoUser("provider@mail.com", "Dana", "Reyes", "client", listOf(RoleCodes.PROVIDER)),
+        DemoUser("readonly@mail.com", "Robin", "Iyer", "client", listOf(RoleCodes.READ_ONLY)),
+    )
 
     data class DemoProvider(
         /** What a claim in [CLAIMS] names this clinician by. */

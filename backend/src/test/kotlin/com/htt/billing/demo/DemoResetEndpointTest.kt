@@ -1,6 +1,6 @@
 package com.htt.billing.demo
 
-import com.htt.billing.identity.DevAdminSeeder
+import com.htt.billing.identity.DevUserSeeder
 import com.htt.billing.security.RoleCodes
 import com.htt.billing.service.demo.DemoResetService
 import com.htt.billing.support.BillingApiTest
@@ -8,6 +8,7 @@ import com.htt.billing.support.assertStatus
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.springframework.beans.factory.annotation.Autowired
@@ -16,7 +17,7 @@ import org.springframework.test.context.TestPropertySource
 
 /**
  * The reset endpoint where it is meant to exist. `app.env=demo` rather than
- * development, so the reset beans register while the dev-admin seeder (which is
+ * development, so the reset beans register while the dev-user seeder (which is
  * development only) stays out of this context. Autowiring [DemoDataSeeder] here
  * also proves the gate, since the bean would not exist without it.
  *
@@ -33,9 +34,9 @@ class DemoResetEndpointTest : BillingApiTest() {
     @AfterEach
     fun removeDemoPractice() {
         clearDemoData(jdbc)
-        // Fabricated for the grant test below.
-        jdbc.sql("DELETE FROM users WHERE email = :email")
-            .param("email", DevAdminSeeder.DEV_ADMIN_EMAIL)
+        // Fabricated for the grant tests below.
+        jdbc.sql("DELETE FROM users WHERE email IN (:emails)")
+            .param("emails", FABRICATED_ACCOUNTS)
             .update()
     }
 
@@ -65,10 +66,10 @@ class DemoResetEndpointTest : BillingApiTest() {
 
     @Test
     fun resetGivesTheDevAdminAccessToTheSeededPractice() {
-        // The local login is a platform account with no billing role, and the
+        // The local login is a plain identity with no billing role, and the
         // billing screens are scoped to the caller's grants, so without this the
         // seeded practice would be invisible to the only account a developer has.
-        val devAdminId = insertDevAdmin()
+        val devAdminId = insertAccount(DevUserSeeder.DEV_ADMIN_EMAIL)
         val platformAdmin = signIn(RoleCodes.PLATFORM_ADMIN, null)
 
         assertStatus(200, env.doJson("POST", "/api/system/reset", platformAdmin.token, null))
@@ -81,7 +82,24 @@ class DemoResetEndpointTest : BillingApiTest() {
         assertEquals(DemoDataset.DEV_ADMIN_ROLES.size, assignmentsFor(devAdminId))
     }
 
-    private fun insertDevAdmin(): Int {
+    @Test
+    fun resetPairsEachRolesScopeWithTheRightAssignment() {
+        // A platform role belongs to no practice. Assigning one against the demo
+        // organization would still resolve to the same permissions but would put
+        // the account inside the tenant boundary it is supposed to sit above.
+        val platformId = insertAccount("platform@mail.com")
+        val billerId = insertAccount("biller@mail.com")
+        val platformAdmin = signIn(RoleCodes.PLATFORM_ADMIN, null)
+
+        assertStatus(200, env.doJson("POST", "/api/system/reset", platformAdmin.token, null))
+        val organizationId = demoOrganizationId(jdbc)
+        assertNotNull(organizationId)
+
+        assertNull(organizationFor(platformId), "PLATFORM_ADMIN should be assigned with no practice")
+        assertEquals(organizationId, organizationFor(billerId), "BILLER should be assigned with the practice")
+    }
+
+    private fun insertAccount(email: String): Int {
         val inserted = jdbc
             .sql(
                 """
@@ -91,17 +109,31 @@ class DemoResetEndpointTest : BillingApiTest() {
                 RETURNING id
                 """,
             )
-            .param("email", DevAdminSeeder.DEV_ADMIN_EMAIL)
+            .param("email", email)
             .query(Int::class.javaObjectType)
             .optional()
             .orElse(null)
         if (inserted != null) return inserted
         return jdbc
             .sql("SELECT id FROM users WHERE email = :email")
-            .param("email", DevAdminSeeder.DEV_ADMIN_EMAIL)
+            .param("email", email)
             .query(Int::class.javaObjectType)
             .single()
     }
+
+    /** The practice a user's single active assignment is scoped to, or null. */
+    private fun organizationFor(userId: Int): Int? = jdbc
+        .sql(
+            """
+            SELECT a.organization_id
+            FROM user_role_assignments a
+            WHERE a.user_id = :userId AND a.active
+            """,
+        )
+        .param("userId", userId)
+        .query(Int::class.javaObjectType)
+        .optional()
+        .orElse(null)
 
     private fun assignmentsFor(userId: Int): Int = jdbc
         .sql(
@@ -133,6 +165,15 @@ class DemoResetEndpointTest : BillingApiTest() {
         assertEquals(
             DemoDataset.JANE.coverages.first().memberId,
             demoCoverageMemberId(jdbc, patientId!!),
+        )
+    }
+
+    private companion object {
+        /** Accounts the grant tests fabricate, since this context seeds no users. */
+        val FABRICATED_ACCOUNTS = listOf(
+            DevUserSeeder.DEV_ADMIN_EMAIL,
+            "platform@mail.com",
+            "biller@mail.com",
         )
     }
 }

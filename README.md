@@ -58,10 +58,22 @@ one implementation of each:
 `make help` and `./manage.sh help` list every target and subcommand;
 `./manage.sh` with no argument prints the same list as `help`.
 
-Dev admin: **admin@mail.com** / **Password1234!** — the first login from a new
-browser asks for a 2FA code; in development it's always `1234`, and the browser
-is trusted afterwards. Without SMTP configured the mailer logs emails instead of
-sending them; under compose, Mailpit collects them at http://localhost:8025.
+A development boot seeds one login per billing role, so the permission matrix can
+be walked rather than read. Every account uses the password **Password1234!**.
+
+| Login               | Billing role                     | What it shows                                               |
+| ------------------- | -------------------------------- | ----------------------------------------------------------- |
+| `admin@mail.com`    | PRACTICE_ADMIN + BILLING_MANAGER | every screen, plus user management                          |
+| `manager@mail.com`  | BILLING_MANAGER                  | every billing screen, including void and queue assignment   |
+| `biller@mail.com`   | BILLER                           | claims and the queue, no Audit trail, no void or assignment |
+| `provider@mail.com` | PROVIDER                         | claims and patients only, nothing that touches money        |
+| `readonly@mail.com` | READ_ONLY                        | every screen, no action that changes anything               |
+| `platform@mail.com` | PLATFORM_ADMIN                   | the dashboard and the audit trail, and no practice content  |
+
+The first login from a new browser asks for a 2FA code. In development it's
+always `1234`, and the browser is trusted afterwards. Without SMTP configured
+the mailer logs emails instead of sending them, and under compose Mailpit
+collects them at http://localhost:8025.
 
 A development boot seeds the demo practice — ten patients with their coverages,
 three clinicians and fourteen claims across every state the screens show, with
