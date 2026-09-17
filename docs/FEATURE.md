@@ -113,9 +113,13 @@ grant or contradicted by one. `staff` was the clearest case. Any role allowed to
 read the user list was also allowed to change it, which makes it an
 administrator, so the middle rung had no one left to hold it.
 
-Administration of users is the one thing not scoped to a practice yet, because a
-`users` row carries no practice of its own and the only link to one is an
-assignment, which a freshly created account does not have.
+A user belongs to a practice through an assignment, which is what makes the
+boundary around user administration expressible. An administrator sees an account
+when their `USER_VIEW` reaches one of the scopes that account holds an assignment
+at, and every per-user route asks the same question before it acts. So a practice
+administrator manages only their own practice's accounts and answers "not found"
+for anyone else's, and a platform administrator sees every practice and the
+accounts nobody has placed yet, since placing them is its job.
 
 The V1 matrix, reviewed and settled in Milestone 8. `PermissionMatrixTest` holds
 it to the rules the review set: platform administration carries no practice
@@ -143,14 +147,9 @@ table with nothing explaining why. Both the links and the controls are rendering
 only. Every route authorizes for itself, so a typed URL or a scripted call still
 reaches the server, which refuses it.
 
-Two things the review left as they are, because changing them is a product
-decision rather than a correction:
+One thing the review left as it is, because changing it is a product decision
+rather than a correction:
 
-- **No billing role-assignment endpoint.** `RoleAdminService` enforces and audits
-  the rule — an assignment is authorized at the target scope, and a
-  platform-scoped role cannot be pinned to a practice — but nothing exposes it
-  over HTTP. V1 changes platform roles through user administration and billing
-  roles through seeding.
 - **`PLATFORM_ADMIN` holds `ROLE_ASSIGN` at platform scope**, so it can grant a
   practice role — including to itself. It is explicit and audited, and the plan
   expects a platform administrator to create a practice's first administrator,

@@ -277,19 +277,38 @@ class UserRepository(private val jdbc: JdbcClient) {
         .orElse(null)
 
     /**
-     * Every user, each with the billing roles they hold.
+     * The users an administrator may see, each with the billing roles they hold.
      *
-     * Not scoped to a practice yet. `users` carries no practice of its own, so
-     * the only link to one is a role assignment, and an account an administrator
-     * has just created has none. Scoping this list means deciding how an account
-     * belongs to a practice, which is its own piece of work.
+     * A user is visible when an administrator's `USER_VIEW` reaches one of the
+     * scopes the user holds an assignment at, which is what confines a practice
+     * administrator to their own practice. A platform-scoped administrator sees
+     * everyone, including accounts with no assignment yet, because placing those
+     * is their job.
      *
      * The billing roles come along as one aggregated column rather than a query
      * per row, since the screen shows a page of them at once. Both the role and
      * the assignment have to be active to count, the same rule the permission
      * lookup applies, so the list can't claim a role that grants nothing.
      */
-    fun list(): List<ListItem> {
+    fun list(organizationIds: List<Int>, platformScope: Boolean): List<ListItem> {
+        // An organization-scoped administrator with no practice manages nobody.
+        // Returned before the query so the id list is never empty in the SQL
+        // below, where `IN ()` would not parse.
+        if (!platformScope && organizationIds.isEmpty()) {
+            return emptyList()
+        }
+        val scope =
+            if (platformScope) {
+                "TRUE"
+            } else {
+                """
+                EXISTS (
+                    SELECT 1 FROM user_role_assignments a
+                    WHERE a.user_id = users.id AND a.active
+                      AND a.organization_id IN (:organizationIds)
+                )
+                """
+            }
         // Explicit row mapper so created_at is normalised to UTC before it is
         // serialised, whatever offset the driver hands back.
         return jdbc
@@ -306,9 +325,11 @@ class UserRepository(private val jdbc: JdbcClient) {
                            ''
                        ) AS "roleCodes"
                 FROM users
+                WHERE $scope
                 ORDER BY created_at ASC
                 """,
             )
+            .param("organizationIds", organizationIds)
             .query(
                 RowMapper { rs, _ ->
                     ListItem(

@@ -7,6 +7,9 @@ import com.htt.billing.repository.practice.OrganizationRepository
 import com.htt.billing.repository.practice.OrganizationRepository.Organization
 import com.htt.billing.repository.security.RbacRepository
 import com.htt.billing.repository.security.RbacRepository.Grant
+import com.htt.billing.repository.security.RbacRepository.Role
+import com.htt.billing.security.Permissions
+import com.htt.billing.security.ScopeTypes
 import org.springframework.stereotype.Service
 
 /**
@@ -104,6 +107,47 @@ class AuthorizationService(
 
     /** The codes of the roles the user holds, at any scope, for `/api/me`. */
     fun rolesFor(userId: Int): List<String> = rbac.roleCodesFor(userId)
+
+    /**
+     * Refuses unless the actor's `USER_VIEW` reaches at least one of the target's
+     * assignment scopes.
+     *
+     * The same shape as [requireVisible], and for the same reason — an
+     * administrator of one practice gets "not found" rather than a refusal for an
+     * account they hold nothing in, because a 403 would confirm the account
+     * exists elsewhere. This is what confines user administration to a practice.
+     */
+    fun requireUserVisible(actorId: Int, targetUserId: Int, missingMessage: String) {
+        val grants = grantsFor(actorId)
+        val scopes = rbac.assignmentScopes(targetUserId)
+        // An account with no assignment is reachable by nobody but a
+        // platform-scoped administrator, who is the one who places it.
+        val reachable = scopes.isEmpty() && permits(grants, Permissions.USER_VIEW, null)
+        if (!reachable && !scopes.any { permits(grants, Permissions.USER_VIEW, it) }) {
+            throw NotFoundException(missingMessage)
+        }
+    }
+
+    /**
+     * The roles the actor may hand out, which is the roles whose scope matches a
+     * scope they hold `ROLE_ASSIGN` at. A practice administrator gets the
+     * organization-scoped roles and no platform ones, so the picker cannot offer
+     * a grant the server would refuse.
+     */
+    fun assignableRoles(actorId: Int): List<Role> {
+        val grants = grantsFor(actorId).filter { it.permission == Permissions.ROLE_ASSIGN }
+        if (grants.isEmpty()) {
+            return emptyList()
+        }
+        // A platform-scoped grant covers every practice, so it can hand out the
+        // platform roles too. An organization-scoped one covers only its own
+        // practice, which is enough for the organization roles and no more.
+        val anywhere = permits(grants, Permissions.ROLE_ASSIGN, null)
+        val inSomePractice = grants.any { it.organizationId != null }
+        return rbac.activeRoles().filter { role ->
+            if (role.scopeType == ScopeTypes.PLATFORM) anywhere else anywhere || inSomePractice
+        }
+    }
 
     /**
      * The organizations the user may see with [permission], for list endpoints.

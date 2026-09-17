@@ -72,6 +72,30 @@ class RoleAdminService(
     }
 
     /**
+     * [assign] for a request that may not name a scope. An organization role lands
+     * in whichever practice the actor can assign in, so a browser never supplies
+     * the tenant it writes to, and a platform role has to arrive without one.
+     */
+    fun assignResolvingScope(
+        actorId: Int,
+        targetUserId: Int,
+        roleCode: String,
+        requestedOrganizationId: Int,
+    ): Assignment {
+        val role = rbac.findRoleByCode(roleCode)
+            ?: throw ValidationException("Unknown role: $roleCode")
+        val scope = if (role.scopeType == ScopeTypes.ORGANIZATION) {
+            authorization.resolveWriteOrganization(actorId, Permissions.ROLE_ASSIGN, requestedOrganizationId)
+        } else {
+            if (requestedOrganizationId > 0) {
+                throw ValidationException("${role.code} is platform-scoped and takes no organization")
+            }
+            null
+        }
+        return assign(actorId, targetUserId, roleCode, scope)
+    }
+
+    /**
      * A role's scope and the assignment's scope have to agree, or the boundary
      * is meaningless — an organization-scoped role with no organization would
      * match every practice.

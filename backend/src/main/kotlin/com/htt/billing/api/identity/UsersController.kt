@@ -7,6 +7,7 @@ import com.htt.billing.identity.AuthUser
 import com.htt.billing.security.Permissions
 import com.htt.billing.service.identity.UserAdminService
 import com.htt.billing.service.security.AuthorizationService
+import com.htt.billing.service.security.RoleAdminService
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -21,11 +22,16 @@ import org.springframework.web.bind.annotation.RestController
 /**
  * Staff/admin user management. The permission gate runs before the path id is
  * parsed, because that is the order the original checked them in.
+ *
+ * Each route then asks a second question the permission alone cannot answer —
+ * whether the named account is in a practice the caller reaches — which lives in
+ * [UserAdminService] and [RoleAdminService].
  */
 @RestController
 @RequestMapping("/api/users")
 class UsersController(
     private val admin: UserAdminService,
+    private val roleAdmin: RoleAdminService,
     private val authorization: AuthorizationService,
 ) {
 
@@ -34,7 +40,24 @@ class UsersController(
         require(user, Permissions.USER_VIEW)
         return Api.respond(
             HttpStatus.OK,
-            mapOf("users" to admin.listUsers()),
+            mapOf("users" to admin.listUsers(user.id)),
+        )
+    }
+
+    /**
+     * The roles this caller may hand out, so the picker offers only grants the
+     * server would accept.
+     */
+    @GetMapping("/assignable-roles")
+    fun assignableRoles(user: AuthUser): ResponseEntity<Any> {
+        require(user, Permissions.ROLE_ASSIGN)
+        return Api.respond(
+            HttpStatus.OK,
+            mapOf(
+                "roles" to authorization.assignableRoles(user.id).map {
+                    mapOf("code" to it.code, "scopeType" to it.scopeType)
+                },
+            ),
         )
     }
 
@@ -45,7 +68,17 @@ class UsersController(
     ): ResponseEntity<Any> {
         require(user, Permissions.USER_CREATE)
         val request = Api.decode(body, CreateUserBody::class.java)
-        val created = admin.createUser(request.email, request.password)
+        val created = try {
+            admin.createUser(
+                user.id,
+                request.email,
+                request.password,
+                request.roleCode,
+                request.organizationId,
+            )
+        } catch (rejected: ValidationException) {
+            return Api.respond(HttpStatus.BAD_REQUEST, Api.msg(rejected.message))
+        }
         return Api.respond(
             HttpStatus.CREATED,
             mapOf(
@@ -55,6 +88,39 @@ class UsersController(
                     "id" to created.id,
                     "email" to created.email,
                     "emailVerified" to created.emailVerified,
+                ),
+            ),
+        )
+    }
+
+    /**
+     * Grants a role. Authorized at the target scope rather than by this caller's
+     * visibility, so a practice administrator can place an account in their own
+     * practice and nowhere else.
+     */
+    @PostMapping("/{id}/roles")
+    fun assignRole(
+        user: AuthUser,
+        @PathVariable("id") id: String,
+        @RequestBody(required = false) body: ByteArray?,
+    ): ResponseEntity<Any> {
+        val userId = Api.parseId(id)
+        val request = Api.decode(body, AssignRoleBody::class.java)
+        val assignment = try {
+            roleAdmin.assignResolvingScope(user.id, userId, request.roleCode, request.organizationId)
+        } catch (rejected: ValidationException) {
+            return Api.respond(HttpStatus.BAD_REQUEST, Api.msg(rejected.message))
+        }
+        return Api.respond(
+            HttpStatus.CREATED,
+            mapOf(
+                "success" to true,
+                "message" to "Role assigned",
+                "assignment" to mapOf(
+                    "id" to assignment.id,
+                    "userId" to assignment.userId,
+                    "roleCode" to assignment.roleCode,
+                    "organizationId" to assignment.organizationId,
                 ),
             ),
         )
@@ -86,7 +152,7 @@ class UsersController(
         if (!emailVerified.isBoolean) {
             return Api.respond(HttpStatus.BAD_REQUEST, Api.msg("emailVerified must be a boolean"))
         }
-        val updated = admin.setVerification(userId, emailVerified.booleanValue())
+        val updated = admin.setVerification(user.id, userId, emailVerified.booleanValue())
         return Api.respond(
             HttpStatus.OK,
             mapOf(
@@ -106,7 +172,7 @@ class UsersController(
         require(user, Permissions.USER_EDIT)
         val userId = Api.parseId(id)
         try {
-            admin.resendVerification(userId)
+            admin.resendVerification(user.id, userId)
         } catch (rejected: ValidationException) {
             return Api.respond(HttpStatus.BAD_REQUEST, Api.msg(rejected.message))
         }
@@ -122,7 +188,7 @@ class UsersController(
     @PostMapping("/{id}/reset-password")
     fun resetPassword(user: AuthUser, @PathVariable("id") id: String): ResponseEntity<Any> {
         require(user, Permissions.USER_RESET_PASSWORD)
-        admin.resetPassword(Api.parseId(id))
+        admin.resetPassword(user.id, Api.parseId(id))
         return Api.respond(
             HttpStatus.OK,
             mapOf(

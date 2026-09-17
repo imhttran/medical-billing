@@ -559,7 +559,8 @@ body {
   margin: var(--space-3) 0;
 }
 
-.add-user-form input {
+.add-user-form input,
+.add-user-form select {
   flex: 1;
   padding: var(--space-2);
   background-color: var(--raised-color);

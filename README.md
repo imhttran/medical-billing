@@ -158,15 +158,17 @@ backend is shaped this way, and the traps a change can trip, are in
 
 ## API
 
-53 endpoints under `/api/*` — `backend/src/main/kotlin/com/htt/billing/api/` holds
+54 endpoints under `/api/*` — `backend/src/main/kotlin/com/htt/billing/api/` holds
 every controller, one package per capability:
 
 - **Public auth** (8): signup, verify, resend-verification, forgot-password,
   reset-password, login, login/verify (2FA code), login/resend (2FA code)
 - **Self-service, any signed-in user** (4): me, profile (get/save),
   change-password
-- **Staff/admin** (7): list users, create user, delete, verify/unverify,
-  change role, resend verification, reset password
+- **Staff/admin** (8): list users, create user, delete, verify/unverify,
+  assign role, the roles this caller may hand out, resend verification, reset
+  password. The list and every per-user route are confined to the caller's
+  practices
 - **Organizations** (1): list, derived from the caller's own grants
 - **Patients** (5): list/search, create, read, update, and the patient's balance
   across their claims

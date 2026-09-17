@@ -136,6 +136,9 @@ export default function DashboardPage() {
   const [me, setMe] = useState<MeUser | null>(null);
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [usersFailed, setUsersFailed] = useState(false);
+  // The roles this caller may hand out, fetched rather than assumed, so the
+  // Add User picker cannot offer a grant the server would refuse.
+  const [assignableRoles, setAssignableRoles] = useState<string[]>([]);
   // Sort column/direction + current page survive across fetches so a
   // mutation's refresh doesn't reset the admin's place in the list.
   const [sortBy, setSortBy] = useState<SortKey>("email");
@@ -201,6 +204,15 @@ export default function DashboardPage() {
 
         // Listing users is USER_VIEW, which the four billing roles don't hold.
         if (allows(user, "USER_VIEW")) await loadUsers(stored);
+        if (allows(user, "ROLE_ASSIGN")) {
+          const roles = await getJson<{ roles?: { code: string }[] }>(
+            stored,
+            "/api/users/assignable-roles",
+          );
+          if (roles.ok && roles.data.roles) {
+            setAssignableRoles(roles.data.roles.map((role) => role.code));
+          }
+        }
       } catch {
         window.location.href = "/";
       }
@@ -260,6 +272,9 @@ export default function DashboardPage() {
       const result = await callApi(authToken, "/api/users", "POST", {
         email: data.get("email"),
         password: data.get("password"),
+        // The role travels with the account, because one without an assignment
+        // belongs to no practice and would vanish from this list.
+        roleCode: data.get("roleCode"),
       });
       if (result) {
         form.reset();
@@ -332,6 +347,20 @@ export default function DashboardPage() {
                     placeholder="Temporary password"
                     required
                   />
+                  {/* Only the roles this caller may hand out, straight from the
+                      server, so it cannot offer a grant that would be refused. */}
+                  <select
+                    name="roleCode"
+                    aria-label="Role"
+                    defaultValue={assignableRoles[0] ?? ""}
+                    required
+                  >
+                    {assignableRoles.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
                   <button type="submit" className="primary-button">
                     Add User
                   </button>

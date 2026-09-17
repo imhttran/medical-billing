@@ -10,12 +10,12 @@ Four plan lines are answered differently on purpose.
 - Resubmission is `POST /api/claims/{id}/submit`, which picks `CLAIM_SUBMIT` or `CLAIM_RESUBMIT` from the claim's current status. There is no `/correct` route, because correcting a claim is editing it and sending it again.
 - The simulated payer refuses on one rule, the member not being covered on the date of service, and denies on one, a service it has no rate for. The rest of section 10's examples belong to claim validation, which is where they were built.
 - Claim history is the audit trail rather than a per-claim timeline. `GET /api/audit-events` and the `/audit` screen carry each submission and resubmission.
+- Role assignment is `POST /api/users/{id}/roles` and creation takes the role with the account, because an account with no assignment belongs to no practice and would be invisible to the administrator who just made it. `GET /api/users/assignable-roles` is what populates the picker.
 
 Not built:
 
 - The Milestone 0 health endpoint. Nothing polls one, and there is no `/health` route.
 - Inbound ClaimResponse import. Our simulated payers send nothing back, so the reverse of the export waits on a real requirement.
-- A billing role-assignment endpoint. `RoleAdminService` enforces and audits the rule but nothing exposes it over HTTP, so V1 assigns platform roles through user administration and practice roles through seeding.
 - The R4 `diagnosis` element on FHIR export. HAPI's `diagnosisCodeableConcept` spelling is what goes out. The import accepts both, so only conformant senders see the difference.
 
 Two open permission decisions, both written up in the permission matrix section of `docs/FEATURE.md`:

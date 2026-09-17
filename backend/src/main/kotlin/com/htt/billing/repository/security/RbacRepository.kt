@@ -55,6 +55,29 @@ class RbacRepository(private val jdbc: JdbcClient) {
         .optional()
         .orElse(null)
 
+    /** Every active role, for the list of roles a caller may hand out. */
+    fun activeRoles(): List<Role> = jdbc
+        .sql("SELECT id, code, scope_type AS \"scopeType\" FROM roles WHERE active ORDER BY code")
+        .query(Role::class.java)
+        .list()
+
+    /**
+     * The scopes a user holds an active assignment at, one entry each, with null
+     * for a platform-scoped grant. This is what decides which administrators may
+     * see the account.
+     */
+    fun assignmentScopes(userId: Int): List<Int?> = jdbc
+        .sql(
+            """
+            SELECT DISTINCT organization_id AS "organizationId"
+            FROM user_role_assignments
+            WHERE user_id = :userId AND active
+            """,
+        )
+        .param("userId", userId)
+        .query(RowMapper { rs, _ -> (rs.getObject("organizationId") as? Number)?.toInt() })
+        .list()
+
     /**
      * The codes of the roles this user holds, at any scope, sorted. What
      * `/api/me` reports so a signed-in account can say what it is.

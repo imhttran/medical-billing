@@ -40,19 +40,55 @@ class UsersListRoleCodesTest : BillingApiTest() {
     @Test
     fun aRevokedRoleIsNotClaimed() {
         // A list that reported revoked assignments would show permissions the
-        // user does not have, which is worse than showing none.
+        // user does not have, which is worse than showing none. A second
+        // assignment stays active, so the account is still in the caller's
+        // practice and the revoked one is what is under test.
         val admin = signIn(RoleCodes.PRACTICE_ADMIN, practiceA.id)
 
-        val revokedId = insertUser("revoked")
-        assign(revokedId, RoleCodes.BILLER, practiceA.id)
-        jdbc.sql("UPDATE user_role_assignments SET active = false WHERE user_id = :id")
-            .param("id", revokedId)
+        val targetId = insertUser("revoked")
+        assign(targetId, RoleCodes.BILLER, practiceA.id)
+        assign(targetId, RoleCodes.PROVIDER, practiceA.id)
+        jdbc.sql(
+            """
+            UPDATE user_role_assignments SET active = false
+            WHERE user_id = :id
+              AND role_id = (SELECT id FROM roles WHERE code = :code)
+            """,
+        )
+            .param("id", targetId)
+            .param("code", RoleCodes.BILLER)
             .update()
 
         val rows = env.doJson("GET", "/api/users", admin.token, null).body.path("users")
-        val row = rows.first { it.path("id").asInt() == revokedId }
-        assertTrue(row.path("roleCodes").size() == 0) {
-            "a revoked assignment should read as no role, got ${row.path("roleCodes")}"
+        val row = rows.first { it.path("id").asInt() == targetId }
+        assertEquals(
+            listOf(RoleCodes.PROVIDER),
+            row.path("roleCodes").map { it.asText() },
+        )
+    }
+
+    @Test
+    fun anAccountWithNoAssignmentLeavesTheCallersList() {
+        // A user belongs to a practice through an assignment, so revoking the
+        // last one takes them out of it. This is the boundary that confines a
+        // practice administrator to their own practice.
+        val admin = signIn(RoleCodes.PRACTICE_ADMIN, practiceA.id)
+
+        val targetId = insertUser("unassigned")
+        assign(targetId, RoleCodes.BILLER, practiceA.id)
+
+        val before = env.doJson("GET", "/api/users", admin.token, null).body.path("users")
+        assertTrue(before.any { it.path("id").asInt() == targetId }) {
+            "an assigned account should be visible to an administrator of its practice"
+        }
+
+        jdbc.sql("UPDATE user_role_assignments SET active = false WHERE user_id = :id")
+            .param("id", targetId)
+            .update()
+
+        val after = env.doJson("GET", "/api/users", admin.token, null).body.path("users")
+        assertTrue(after.none { it.path("id").asInt() == targetId }) {
+            "an account with no assignment belongs to no practice"
         }
     }
 }
