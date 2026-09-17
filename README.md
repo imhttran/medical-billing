@@ -199,11 +199,12 @@ is refused where the claim is written rather than left to validation: the foreig
 keys would accept it, and a claim in one practice pointing at another's patient
 is not a state the API should be able to produce.
 
-The UI has five screens against this API: `/patients` and `/patients/{id}` for
+The UI has six screens against this API: `/patients` and `/patients/{id}` for
 patients and their coverage, `/claims` and `/claims/{id}` for the claim workflow,
-and `/work-queue` for the follow-up the payers' answers create. `/claims/{id}` is
-where the golden path is walkable — create, validate, mark ready, submit, and read
-the payer's answer — and it is what Milestone 1's acceptance criteria describe.
+`/work-queue` for the follow-up the payers' answers create, and `/audit` for what
+was done. `/claims/{id}` is where the golden path is walkable — create, validate,
+mark ready, submit, and read the payer's answer — and it is what Milestone 1's
+acceptance criteria describe.
 
 `GET /api/me` returns the platform role, not billing permissions, so the UI
 cannot hide what the user may not do. It shows the action and displays the

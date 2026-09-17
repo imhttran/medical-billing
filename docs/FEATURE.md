@@ -18,10 +18,11 @@
   payments are recorded in the same transaction as the act, and the work queue
   records its assignments and resolutions. `GET /api/audit-events` reads them
   back: the caller's practices, newest first, filterable by practice and action
-  and bounded in size. A practice reads only its own, and the events that belong
-  to no practice — platform-wide role assignments — are shown only to a
-  platform-scoped `AUDIT_VIEW`. Metadata is ids and codes, never patient
-  information
+  and bounded in size. `/audit` shows the same trail on screen — when, who, what,
+  the record it touched with a link to it, and the ids and codes behind it. A
+  practice reads only its own, and the events that belong to no practice —
+  platform-wide role assignments — are shown only to a platform-scoped
+  `AUDIT_VIEW`. Metadata is ids and codes, never patient information
 - **Patients, providers and coverage** — created, searched and edited per
   practice. A record in another practice answers 404 rather than 403, so the API
   never confirms that it exists

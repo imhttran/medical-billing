@@ -59,6 +59,7 @@ class AuditApiTest : BillingApiTest() {
         assertEquals(claimId.toString(), submission.path("entityId").asText())
         assertEquals(ClaimService.ENTITY_CLAIM, submission.path("entityType").asText())
         assertEquals(admin.userId, submission.path("userId").asInt())
+        assertEquals(admin.email, submission.path("userEmail").asText())
         assertEquals(practiceA.id, submission.path("organizationId").asInt())
         assertEquals(claimNumber, submission.path("metadata").path("claimNumber").asText())
         assertEquals("ADJUDICATED", submission.path("metadata").path("status").asText())

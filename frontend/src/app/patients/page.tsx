@@ -140,6 +140,13 @@ export default function PatientsPage() {
         >
           Dashboard
         </a>
+        <a
+          className="logout-link"
+          href="/audit"
+          style={{ marginRight: "1rem" }}
+        >
+          Audit trail
+        </a>
         <a className="logout-link" href="/" onClick={logout}>
           Logout
         </a>

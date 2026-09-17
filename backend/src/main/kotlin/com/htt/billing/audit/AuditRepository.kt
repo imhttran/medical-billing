@@ -23,11 +23,16 @@ class AuditRepository(private val jdbc: JdbcClient) {
      * [organizationId] is null for a platform-scoped act — one that belongs to no
      * single practice, such as a platform-wide role assignment. Those are not in
      * any practice's history, so a practice-scoped reader never sees them.
+     *
+     * [userEmail] comes from the join rather than from the event row: an id alone
+     * is not answerable to the question an audit trail is asked, and the reader
+     * already sees their practice's users.
      */
     data class Event(
         val id: Int,
         val organizationId: Int?,
         val userId: Int?,
+        val userEmail: String?,
         val action: String,
         val entityType: String,
         val entityId: String?,
@@ -78,15 +83,16 @@ class AuditRepository(private val jdbc: JdbcClient) {
     ): List<Event> = jdbc
         .sql(
             """
-            SELECT id, organization_id AS "organizationId", user_id AS "userId",
-                   action, entity_type AS "entityType", entity_id AS "entityId",
-                   "timestamp", metadata
-            FROM audit_events
-            WHERE (organization_id IN (:organizationIds)
-                   OR (:includePlatformEvents AND organization_id IS NULL))
-              AND (:organizationId IS NULL OR organization_id = :organizationId)
-              AND (:action IS NULL OR action = :action)
-            ORDER BY "timestamp" DESC, id DESC
+            SELECT e.id, e.organization_id AS "organizationId", e.user_id AS "userId",
+                   u.email AS "userEmail", e.action, e.entity_type AS "entityType",
+                   e.entity_id AS "entityId", e."timestamp", e.metadata
+            FROM audit_events e
+            LEFT JOIN users u ON u.id = e.user_id
+            WHERE (e.organization_id IN (:organizationIds)
+                   OR (:includePlatformEvents AND e.organization_id IS NULL))
+              AND (:organizationId IS NULL OR e.organization_id = :organizationId)
+              AND (:action IS NULL OR e.action = :action)
+            ORDER BY e."timestamp" DESC, e.id DESC
             LIMIT :limit
             """,
         )
@@ -109,6 +115,7 @@ class AuditRepository(private val jdbc: JdbcClient) {
                 id = rs.getInt("id"),
                 organizationId = (rs.getObject("organizationId") as? Number)?.toInt(),
                 userId = (rs.getObject("userId") as? Number)?.toInt(),
+                userEmail = rs.getString("userEmail"),
                 action = rs.getString("action"),
                 entityType = rs.getString("entityType"),
                 entityId = rs.getString("entityId"),
