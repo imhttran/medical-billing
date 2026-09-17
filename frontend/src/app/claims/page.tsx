@@ -11,7 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 import { getJson, submitJson } from "@/lib/api";
 import { money } from "@/lib/money";
-import { useSession } from "@/lib/session";
+import { allows, useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
 import { PageTitle } from "@/components/PageTitle";
@@ -188,124 +188,129 @@ export default function ClaimsPage() {
 
       <div className="dashboard-card">
         <div className="user-list-section">
-          <details ref={addSectionRef}>
-            <summary className="add-user-toggle">New Claim</summary>
-            <form ref={addFormRef} onSubmit={handleAdd}>
-              <div className="input-group">
-                <label htmlFor="patientId">Patient</label>
-                <select
-                  id="patientId"
-                  name="patientId"
-                  required
-                  defaultValue=""
-                  onChange={(event) => loadCoverages(event.target.value)}
-                >
-                  <option value="" disabled>
-                    Choose a patient
-                  </option>
-                  {patients.map((patient) => (
-                    <option key={patient.id} value={patient.id}>
-                      {patient.lastName}, {patient.firstName}
+          {/* The form is the action, so it goes rather than sitting there with
+              a submit that will be refused. */}
+          {allows(me, "CLAIM_CREATE") ? (
+            <details ref={addSectionRef}>
+              <summary className="add-user-toggle">New Claim</summary>
+              <form ref={addFormRef} onSubmit={handleAdd}>
+                <div className="input-group">
+                  <label htmlFor="patientId">Patient</label>
+                  <select
+                    id="patientId"
+                    name="patientId"
+                    required
+                    defaultValue=""
+                    onChange={(event) => loadCoverages(event.target.value)}
+                  >
+                    <option value="" disabled>
+                      Choose a patient
                     </option>
-                  ))}
-                </select>
-              </div>
-              <div className="input-group">
-                <label htmlFor="coverageId">Primary insurance</label>
-                <select
-                  id="coverageId"
-                  name="coverageId"
-                  required
-                  defaultValue=""
-                >
-                  <option value="" disabled>
-                    {coverages.length
-                      ? "Choose the coverage"
-                      : "Choose a patient first"}
-                  </option>
-                  {coverages.map((coverage) => (
-                    <option key={coverage.id} value={coverage.id}>
-                      Member {coverage.memberId} (priority {coverage.priority})
+                    {patients.map((patient) => (
+                      <option key={patient.id} value={patient.id}>
+                        {patient.lastName}, {patient.firstName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label htmlFor="coverageId">Primary insurance</label>
+                  <select
+                    id="coverageId"
+                    name="coverageId"
+                    required
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      {coverages.length
+                        ? "Choose the coverage"
+                        : "Choose a patient first"}
                     </option>
-                  ))}
-                </select>
-              </div>
-              <div className="input-group">
-                <label htmlFor="providerId">Provider</label>
-                <select
-                  id="providerId"
-                  name="providerId"
-                  required
-                  defaultValue=""
-                >
-                  <option value="" disabled>
-                    Choose a provider
-                  </option>
-                  {providers.map((provider) => (
-                    <option key={provider.id} value={provider.id}>
-                      {provider.lastName}, {provider.firstName}
+                    {coverages.map((coverage) => (
+                      <option key={coverage.id} value={coverage.id}>
+                        Member {coverage.memberId} (priority {coverage.priority}
+                        )
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label htmlFor="providerId">Provider</label>
+                  <select
+                    id="providerId"
+                    name="providerId"
+                    required
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      Choose a provider
                     </option>
-                  ))}
-                </select>
-              </div>
-              <div className="input-group">
-                <label htmlFor="serviceDate">Service date</label>
-                <input
-                  id="serviceDate"
-                  name="serviceDate"
-                  type="date"
-                  required
-                />
-              </div>
-              <div className="input-group">
-                <label htmlFor="diagnosisCode">Diagnosis (ICD-10-CM)</label>
-                <input
-                  id="diagnosisCode"
-                  name="diagnosisCode"
-                  list="diagnosis-codes"
-                  placeholder="J06.9"
-                  required
-                />
-                <datalist id="diagnosis-codes">
-                  {diagnoses.map((code) => (
-                    <option key={code.code} value={code.code}>
-                      {code.description}
-                    </option>
-                  ))}
-                </datalist>
-              </div>
-              <div className="input-group">
-                <label htmlFor="procedureCode">Service (CPT/HCPCS)</label>
-                <input
-                  id="procedureCode"
-                  name="procedureCode"
-                  list="procedure-codes"
-                  placeholder="99213"
-                  required
-                />
-                <datalist id="procedure-codes">
-                  {procedures.map((code) => (
-                    <option key={code.code} value={code.code}>
-                      {code.description}
-                    </option>
-                  ))}
-                </datalist>
-              </div>
-              <div className="input-group">
-                <label htmlFor="chargeAmount">Charge</label>
-                <input
-                  id="chargeAmount"
-                  name="chargeAmount"
-                  inputMode="decimal"
-                  placeholder="150.00"
-                  required
-                />
-              </div>
-              <button type="submit" className="primary-button">
-                Create Claim
-              </button>
-            </form>
-          </details>
+                    {providers.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.lastName}, {provider.firstName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label htmlFor="serviceDate">Service date</label>
+                  <input
+                    id="serviceDate"
+                    name="serviceDate"
+                    type="date"
+                    required
+                  />
+                </div>
+                <div className="input-group">
+                  <label htmlFor="diagnosisCode">Diagnosis (ICD-10-CM)</label>
+                  <input
+                    id="diagnosisCode"
+                    name="diagnosisCode"
+                    list="diagnosis-codes"
+                    placeholder="J06.9"
+                    required
+                  />
+                  <datalist id="diagnosis-codes">
+                    {diagnoses.map((code) => (
+                      <option key={code.code} value={code.code}>
+                        {code.description}
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
+                <div className="input-group">
+                  <label htmlFor="procedureCode">Service (CPT/HCPCS)</label>
+                  <input
+                    id="procedureCode"
+                    name="procedureCode"
+                    list="procedure-codes"
+                    placeholder="99213"
+                    required
+                  />
+                  <datalist id="procedure-codes">
+                    {procedures.map((code) => (
+                      <option key={code.code} value={code.code}>
+                        {code.description}
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
+                <div className="input-group">
+                  <label htmlFor="chargeAmount">Charge</label>
+                  <input
+                    id="chargeAmount"
+                    name="chargeAmount"
+                    inputMode="decimal"
+                    placeholder="150.00"
+                    required
+                  />
+                </div>
+                <button type="submit" className="primary-button">
+                  Create Claim
+                </button>
+              </form>
+            </details>
+          ) : null}
 
           {error ? <p role="alert">{error}</p> : null}
 

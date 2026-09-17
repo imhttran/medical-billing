@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { getJson, submitJson } from "@/lib/api";
-import { useSession } from "@/lib/session";
+import { allows, useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
 import { PageTitle } from "@/components/PageTitle";
@@ -175,9 +175,14 @@ export default function WorkQueuePage() {
                             resolved{" "}
                             {item.resolvedAt ? day(item.resolvedAt) : ""}
                           </span>
-                        ) : (
+                        ) : allows(me, "WORK_QUEUE_ASSIGN") ||
+                          allows(me, "WORK_QUEUE_RESOLVE") ? (
                           <>
-                            {item.assignedUserId === me?.id ? null : (
+                            {/* Assignment and resolution are separate
+                                permissions — a biller resolves what someone
+                                else picked up, and can't assign. */}
+                            {item.assignedUserId === me?.id ||
+                            !allows(me, "WORK_QUEUE_ASSIGN") ? null : (
                               <button
                                 type="button"
                                 className="link-button"
@@ -185,15 +190,21 @@ export default function WorkQueuePage() {
                               >
                                 Assign to me
                               </button>
-                            )}{" "}
-                            <button
-                              type="button"
-                              className="primary-button"
-                              onClick={() => act("resolve", item.id)}
-                            >
-                              Resolve
-                            </button>
+                            )}
+                            {allows(me, "WORK_QUEUE_RESOLVE") ? (
+                              <button
+                                type="button"
+                                className="primary-button"
+                                onClick={() => act("resolve", item.id)}
+                              >
+                                Resolve
+                              </button>
+                            ) : null}
                           </>
+                        ) : (
+                          // Neither action is available, so the cell says so
+                          // rather than reading as a row that failed to render.
+                          "—"
                         )}
                       </td>
                     </tr>

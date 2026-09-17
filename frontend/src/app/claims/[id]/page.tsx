@@ -10,7 +10,7 @@ import {
 import { useParams } from "next/navigation";
 import { getJson, submitJson } from "@/lib/api";
 import { decimal, money } from "@/lib/money";
-import { useSession } from "@/lib/session";
+import { allows, useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
 import { PageTitle } from "@/components/PageTitle";
@@ -282,7 +282,13 @@ export default function ClaimDetailPage() {
   // A rejected claim goes back out once whatever the rejection named is fixed,
   // which is usually the service date or the coverage it was billed to.
   const resubmittable = status === "REJECTED" || status === "CORRECTED";
-  const correctable = editable || resubmittable;
+  // Editing the claim is the same permission that marks it ready, and the two
+  // rows below are the only place the edit form appears.
+  const canEdit = allows(me, "CLAIM_EDIT");
+  const canSubmit = allows(me, "CLAIM_SUBMIT");
+  const canResubmit = allows(me, "CLAIM_RESUBMIT");
+  const canRecordPayment = allows(me, "PAYMENT_RECORD");
+  const correctable = (editable || resubmittable) && canEdit;
 
   return (
     <div className="dashboard-container wide">
@@ -336,6 +342,8 @@ export default function ClaimDetailPage() {
               {editable ? (
                 <div className="form-footer">
                   <div className="action-row">
+                    {/* Validation only reads, so it stays whatever the caller
+                        may write. */}
                     <button
                       type="button"
                       className="link-button"
@@ -343,27 +351,31 @@ export default function ClaimDetailPage() {
                     >
                       Validate
                     </button>
-                    <button
-                      type="button"
-                      className="primary-button"
-                      onClick={() => act("ready")}
-                      disabled={status === "READY"}
-                    >
-                      Mark ready
-                    </button>
-                    <button
-                      type="button"
-                      className="primary-button"
-                      onClick={() => act("submit")}
-                      disabled={status !== "READY"}
-                    >
-                      Submit
-                    </button>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={() => act("ready")}
+                        disabled={status === "READY"}
+                      >
+                        Mark ready
+                      </button>
+                    ) : null}
+                    {canSubmit ? (
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={() => act("submit")}
+                        disabled={status !== "READY"}
+                      >
+                        Submit
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
 
-              {resubmittable ? (
+              {resubmittable && canResubmit ? (
                 <div className="form-footer">
                   <div className="action-row">
                     <button
@@ -572,7 +584,7 @@ export default function ClaimDetailPage() {
                     </table>
                   </div>
 
-                  {payments.balance > 0 ? (
+                  {payments.balance > 0 && canRecordPayment ? (
                     <details>
                       <summary>Record a patient payment</summary>
                       <form onSubmit={pay}>

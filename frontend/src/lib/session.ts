@@ -10,9 +10,30 @@ export type SessionUser = {
   emailVerified: boolean;
   mustChangePassword?: boolean;
   hasProfile?: boolean;
-  /** Billing permission codes, which the nav gates its destinations on. */
+  /**
+   * Billing permission codes. The nav gates its destinations on these, and every
+   * write control asks before it renders.
+   */
   permissions?: string[];
 };
+
+/**
+ * Whether the caller holds a billing permission.
+ *
+ * A write control that would only come back 403 is not offered at all — the read
+ * endpoints answer an empty list rather than refusing, so the screens used to
+ * show actions nobody could take. The server still checks every route, so this
+ * decides what is shown, never what is allowed.
+ *
+ * `permissions` is undefined until the session resolves, and these controls only
+ * render afterwards, since their data is fetched with the same token. So an
+ * undefined list here means something went wrong rather than that we are early,
+ * and the answer is no. A missing action is recoverable, an action that always
+ * fails reads as a broken screen.
+ */
+export function allows(user: SessionUser | null, permission: string): boolean {
+  return user?.permissions?.includes(permission) ?? false;
+}
 
 /**
  * The bootstrap every signed-in billing page needs: no token means back to

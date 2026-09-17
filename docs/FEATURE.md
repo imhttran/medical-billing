@@ -129,12 +129,14 @@ platform, and the read-only and billing roles cannot administer anything.
 The billing roles hold no `ROLE_ASSIGN`, `ROLE_MANAGE` or `SYSTEM_RESET`, so
 running the workflow never includes deciding who may run it.
 
-The signed-in session carries these permission codes, and the navigation uses
-them to leave out a destination the caller holds nothing to fill. The list
-endpoints scope rows by permission and answer an empty list rather than
-forbidding, so an ungated link opens on an empty table with nothing explaining
-why. It is rendering only. Every route authorizes for itself, and a typed URL
-still reaches the page.
+The signed-in session carries these permission codes. The navigation uses them
+to leave out a destination the caller holds nothing to fill, and every write
+control asks before it renders, so a biller is never offered Void and a read-only
+account is never offered Submit. The list endpoints scope rows by permission and
+answer an empty list rather than forbidding, so an ungated link opens on an empty
+table with nothing explaining why. Both the links and the controls are rendering
+only. Every route authorizes for itself, so a typed URL or a scripted call still
+reaches the server, which refuses it.
 
 Two things the review left as they are, because changing them is a product
 decision rather than a correction:

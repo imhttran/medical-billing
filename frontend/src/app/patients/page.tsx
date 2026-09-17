@@ -9,7 +9,7 @@ import {
   type MouseEvent,
 } from "react";
 import { getJson, submitJson } from "@/lib/api";
-import { useSession } from "@/lib/session";
+import { allows, useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
 import { PageTitle } from "@/components/PageTitle";
@@ -144,61 +144,65 @@ export default function PatientsPage() {
             ) : null}
           </form>
 
-          <details ref={addSectionRef}>
-            <summary className="add-user-toggle">Add Patient</summary>
-            <form ref={addFormRef} onSubmit={handleAdd}>
-              <div className="input-group">
-                <label htmlFor="firstName">First name</label>
-                <input id="firstName" name="firstName" required />
-              </div>
-              <div className="input-group">
-                <label htmlFor="lastName">Last name</label>
-                <input id="lastName" name="lastName" required />
-              </div>
-              <div className="input-group">
-                <label htmlFor="dateOfBirth">Date of birth</label>
-                <input
-                  id="dateOfBirth"
-                  name="dateOfBirth"
-                  type="date"
-                  required
-                />
-              </div>
-              <div className="input-group">
-                <label htmlFor="sex">Sex</label>
-                <select id="sex" name="sex" defaultValue="">
-                  {SEXES.map((sex) => (
-                    <option key={sex} value={sex}>
-                      {sex || "Not recorded"}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="input-group">
-                <label htmlFor="addressLine1">Address</label>
-                <input id="addressLine1" name="addressLine1" />
-              </div>
-              <div className="input-group">
-                <label htmlFor="city">City</label>
-                <input id="city" name="city" />
-              </div>
-              <div className="input-group">
-                <label htmlFor="state">State</label>
-                <input id="state" name="state" />
-              </div>
-              <div className="input-group">
-                <label htmlFor="postalCode">ZIP</label>
-                <input id="postalCode" name="postalCode" />
-              </div>
-              <div className="input-group">
-                <label htmlFor="phone">Phone</label>
-                <input id="phone" name="phone" />
-              </div>
-              <button type="submit" className="primary-button">
-                Add Patient
-              </button>
-            </form>
-          </details>
+          {/* The form is the action, so it goes rather than sitting there with
+              a submit that will be refused. */}
+          {allows(me, "PATIENT_CREATE") ? (
+            <details ref={addSectionRef}>
+              <summary className="add-user-toggle">Add Patient</summary>
+              <form ref={addFormRef} onSubmit={handleAdd}>
+                <div className="input-group">
+                  <label htmlFor="firstName">First name</label>
+                  <input id="firstName" name="firstName" required />
+                </div>
+                <div className="input-group">
+                  <label htmlFor="lastName">Last name</label>
+                  <input id="lastName" name="lastName" required />
+                </div>
+                <div className="input-group">
+                  <label htmlFor="dateOfBirth">Date of birth</label>
+                  <input
+                    id="dateOfBirth"
+                    name="dateOfBirth"
+                    type="date"
+                    required
+                  />
+                </div>
+                <div className="input-group">
+                  <label htmlFor="sex">Sex</label>
+                  <select id="sex" name="sex" defaultValue="">
+                    {SEXES.map((sex) => (
+                      <option key={sex} value={sex}>
+                        {sex || "Not recorded"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label htmlFor="addressLine1">Address</label>
+                  <input id="addressLine1" name="addressLine1" />
+                </div>
+                <div className="input-group">
+                  <label htmlFor="city">City</label>
+                  <input id="city" name="city" />
+                </div>
+                <div className="input-group">
+                  <label htmlFor="state">State</label>
+                  <input id="state" name="state" />
+                </div>
+                <div className="input-group">
+                  <label htmlFor="postalCode">ZIP</label>
+                  <input id="postalCode" name="postalCode" />
+                </div>
+                <div className="input-group">
+                  <label htmlFor="phone">Phone</label>
+                  <input id="phone" name="phone" />
+                </div>
+                <button type="submit" className="primary-button">
+                  Add Patient
+                </button>
+              </form>
+            </details>
+          ) : null}
 
           {error ? <p role="alert">{error}</p> : null}
 

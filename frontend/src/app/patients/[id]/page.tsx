@@ -10,7 +10,7 @@ import {
 import { useParams } from "next/navigation";
 import { getJson, submitJson } from "@/lib/api";
 import { money } from "@/lib/money";
-import { useSession } from "@/lib/session";
+import { allows, useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
 import { PageTitle } from "@/components/PageTitle";
@@ -81,6 +81,11 @@ export default function PatientDetailPage() {
   // Bumped after a save so the uncontrolled edit form re-mounts with the values
   // the server actually stored.
   const [formVersion, setFormVersion] = useState(0);
+
+  // A provider reads patients and coverage without editing either, so the
+  // controls that would only come back 403 are not offered.
+  const canEditPatient = allows(me, "PATIENT_EDIT");
+  const canEditCoverage = allows(me, "COVERAGE_EDIT");
 
   const load = useCallback(
     async (authToken: string) => {
@@ -239,88 +244,99 @@ export default function PatientDetailPage() {
           {patient ? (
             <>
               <h2>Details</h2>
+              {/* The fields are the only place a patient's details are shown, so
+                  a caller who may read but not edit keeps seeing them and loses
+                  only the ability to change them. A disabled fieldset switches
+                  off everything inside it, the submit included, so there's
+                  nothing left to press. */}
               <form key={formVersion} onSubmit={handleSavePatient}>
-                <div className="input-group">
-                  <label htmlFor="firstName">First name</label>
-                  <input
-                    id="firstName"
-                    name="firstName"
-                    defaultValue={patient.firstName}
-                    required
-                  />
-                </div>
-                <div className="input-group">
-                  <label htmlFor="lastName">Last name</label>
-                  <input
-                    id="lastName"
-                    name="lastName"
-                    defaultValue={patient.lastName}
-                    required
-                  />
-                </div>
-                <div className="input-group">
-                  <label htmlFor="dateOfBirth">Date of birth</label>
-                  <input
-                    id="dateOfBirth"
-                    name="dateOfBirth"
-                    type="date"
-                    defaultValue={patient.dateOfBirth}
-                    required
-                  />
-                </div>
-                <div className="input-group">
-                  <label htmlFor="sex">Sex</label>
-                  <select id="sex" name="sex" defaultValue={patient.sex ?? ""}>
-                    {SEXES.map((sex) => (
-                      <option key={sex} value={sex}>
-                        {sex || "Not recorded"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="input-group">
-                  <label htmlFor="addressLine1">Address</label>
-                  <input
-                    id="addressLine1"
-                    name="addressLine1"
-                    defaultValue={patient.addressLine1 ?? ""}
-                  />
-                </div>
-                <div className="input-group">
-                  <label htmlFor="city">City</label>
-                  <input
-                    id="city"
-                    name="city"
-                    defaultValue={patient.city ?? ""}
-                  />
-                </div>
-                <div className="input-group">
-                  <label htmlFor="state">State</label>
-                  <input
-                    id="state"
-                    name="state"
-                    defaultValue={patient.state ?? ""}
-                  />
-                </div>
-                <div className="input-group">
-                  <label htmlFor="postalCode">ZIP</label>
-                  <input
-                    id="postalCode"
-                    name="postalCode"
-                    defaultValue={patient.postalCode ?? ""}
-                  />
-                </div>
-                <div className="input-group">
-                  <label htmlFor="phone">Phone</label>
-                  <input
-                    id="phone"
-                    name="phone"
-                    defaultValue={patient.phone ?? ""}
-                  />
-                </div>
-                <button type="submit" className="primary-button">
-                  Save
-                </button>
+                <fieldset className="field-group" disabled={!canEditPatient}>
+                  <div className="input-group">
+                    <label htmlFor="firstName">First name</label>
+                    <input
+                      id="firstName"
+                      name="firstName"
+                      defaultValue={patient.firstName}
+                      required
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label htmlFor="lastName">Last name</label>
+                    <input
+                      id="lastName"
+                      name="lastName"
+                      defaultValue={patient.lastName}
+                      required
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label htmlFor="dateOfBirth">Date of birth</label>
+                    <input
+                      id="dateOfBirth"
+                      name="dateOfBirth"
+                      type="date"
+                      defaultValue={patient.dateOfBirth}
+                      required
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label htmlFor="sex">Sex</label>
+                    <select
+                      id="sex"
+                      name="sex"
+                      defaultValue={patient.sex ?? ""}
+                    >
+                      {SEXES.map((sex) => (
+                        <option key={sex} value={sex}>
+                          {sex || "Not recorded"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="input-group">
+                    <label htmlFor="addressLine1">Address</label>
+                    <input
+                      id="addressLine1"
+                      name="addressLine1"
+                      defaultValue={patient.addressLine1 ?? ""}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label htmlFor="city">City</label>
+                    <input
+                      id="city"
+                      name="city"
+                      defaultValue={patient.city ?? ""}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label htmlFor="state">State</label>
+                    <input
+                      id="state"
+                      name="state"
+                      defaultValue={patient.state ?? ""}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label htmlFor="postalCode">ZIP</label>
+                    <input
+                      id="postalCode"
+                      name="postalCode"
+                      defaultValue={patient.postalCode ?? ""}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label htmlFor="phone">Phone</label>
+                    <input
+                      id="phone"
+                      name="phone"
+                      defaultValue={patient.phone ?? ""}
+                    />
+                  </div>
+                  <button type="submit" className="primary-button">
+                    Save
+                  </button>
+                </fieldset>
               </form>
 
               <h2>Balance</h2>
@@ -371,7 +387,13 @@ export default function PatientDetailPage() {
                       <th>Effective</th>
                       <th>Priority</th>
                       <th>Status</th>
-                      <th>Actions</th>
+                      <th
+                        style={
+                          canEditCoverage ? undefined : { display: "none" }
+                        }
+                      >
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -393,19 +415,21 @@ export default function PatientDetailPage() {
                           <td>{coverage.priority}</td>
                           <td>{coverage.active ? "Active" : "Retired"}</td>
                           <td>
-                            <button
-                              type="button"
-                              className={
-                                coverage.active
-                                  ? "button-danger"
-                                  : "link-button"
-                              }
-                              onClick={() =>
-                                setCoverageActive(coverage, !coverage.active)
-                              }
-                            >
-                              {coverage.active ? "Retire" : "Reactivate"}
-                            </button>
+                            {canEditCoverage ? (
+                              <button
+                                type="button"
+                                className={
+                                  coverage.active
+                                    ? "button-danger"
+                                    : "link-button"
+                                }
+                                onClick={() =>
+                                  setCoverageActive(coverage, !coverage.active)
+                                }
+                              >
+                                {coverage.active ? "Retire" : "Reactivate"}
+                              </button>
+                            ) : null}
                           </td>
                         </tr>
                       ))
@@ -414,72 +438,74 @@ export default function PatientDetailPage() {
                 </table>
               </div>
 
-              <details>
-                <summary className="add-user-toggle">Add Coverage</summary>
-                <form onSubmit={handleAddCoverage}>
-                  <div className="input-group">
-                    <label htmlFor="payerId">Payer</label>
-                    <select
-                      id="payerId"
-                      name="payerId"
-                      required
-                      defaultValue=""
-                    >
-                      <option value="" disabled>
-                        Choose a payer
-                      </option>
-                      {payers.map((payer) => (
-                        <option key={payer.id} value={payer.id}>
-                          {payer.name} ({payer.payerCode})
+              {canEditCoverage ? (
+                <details>
+                  <summary className="add-user-toggle">Add Coverage</summary>
+                  <form onSubmit={handleAddCoverage}>
+                    <div className="input-group">
+                      <label htmlFor="payerId">Payer</label>
+                      <select
+                        id="payerId"
+                        name="payerId"
+                        required
+                        defaultValue=""
+                      >
+                        <option value="" disabled>
+                          Choose a payer
                         </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="input-group">
-                    <label htmlFor="memberId">Member ID</label>
-                    <input id="memberId" name="memberId" required />
-                  </div>
-                  <div className="input-group">
-                    <label htmlFor="groupNumber">Group number</label>
-                    <input id="groupNumber" name="groupNumber" />
-                  </div>
-                  <div className="input-group">
-                    <label htmlFor="subscriberName">Subscriber name</label>
-                    <input id="subscriberName" name="subscriberName" />
-                  </div>
-                  <div className="input-group">
-                    <label htmlFor="relationshipToSubscriber">
-                      Relationship to subscriber
-                    </label>
-                    <input
-                      id="relationshipToSubscriber"
-                      name="relationshipToSubscriber"
-                      placeholder="SELF"
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label htmlFor="effectiveDate">Effective date</label>
-                    <input
-                      id="effectiveDate"
-                      name="effectiveDate"
-                      type="date"
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label htmlFor="priority">Priority</label>
-                    <input
-                      id="priority"
-                      name="priority"
-                      type="number"
-                      min="1"
-                      defaultValue="1"
-                    />
-                  </div>
-                  <button type="submit" className="primary-button">
-                    Add Coverage
-                  </button>
-                </form>
-              </details>
+                        {payers.map((payer) => (
+                          <option key={payer.id} value={payer.id}>
+                            {payer.name} ({payer.payerCode})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="input-group">
+                      <label htmlFor="memberId">Member ID</label>
+                      <input id="memberId" name="memberId" required />
+                    </div>
+                    <div className="input-group">
+                      <label htmlFor="groupNumber">Group number</label>
+                      <input id="groupNumber" name="groupNumber" />
+                    </div>
+                    <div className="input-group">
+                      <label htmlFor="subscriberName">Subscriber name</label>
+                      <input id="subscriberName" name="subscriberName" />
+                    </div>
+                    <div className="input-group">
+                      <label htmlFor="relationshipToSubscriber">
+                        Relationship to subscriber
+                      </label>
+                      <input
+                        id="relationshipToSubscriber"
+                        name="relationshipToSubscriber"
+                        placeholder="SELF"
+                      />
+                    </div>
+                    <div className="input-group">
+                      <label htmlFor="effectiveDate">Effective date</label>
+                      <input
+                        id="effectiveDate"
+                        name="effectiveDate"
+                        type="date"
+                      />
+                    </div>
+                    <div className="input-group">
+                      <label htmlFor="priority">Priority</label>
+                      <input
+                        id="priority"
+                        name="priority"
+                        type="number"
+                        min="1"
+                        defaultValue="1"
+                      />
+                    </div>
+                    <button type="submit" className="primary-button">
+                      Add Coverage
+                    </button>
+                  </form>
+                </details>
+              ) : null}
             </>
           ) : null}
         </div>

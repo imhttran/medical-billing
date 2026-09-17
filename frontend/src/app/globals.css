@@ -266,6 +266,22 @@ body {
   cursor: pointer;
 }
 
+/* A fieldset used only to switch a group of fields off, not to draw a box
+   around them. */
+.field-group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+/* A field the caller may read but not change, which is how a provider sees a
+   patient. The browser's own disabled look is faint against the raised fill. */
+.input-group input:disabled,
+.input-group select:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
 .input-group input::placeholder {
   color: var(--placeholder-color);
 }
