@@ -210,6 +210,16 @@ class ClaimRepository(private val jdbc: JdbcClient) {
         .optional()
         .orElse(null)
 
+    /**
+     * @return rows deleted. Takes the lines, diagnoses, adjudications and payments
+     *         of those claims with it, which is why the reset clears claims before
+     *         the patients and coverages they point at.
+     */
+    fun deleteInOrganization(organizationId: Int): Int = jdbc
+        .sql("DELETE FROM claims WHERE organization_id = :organizationId")
+        .param("organizationId", organizationId)
+        .update()
+
     fun findDiagnoses(claimId: Int): List<Diagnosis> = jdbc
         .sql(
             """

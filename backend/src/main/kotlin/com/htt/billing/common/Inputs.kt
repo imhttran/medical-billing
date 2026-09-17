@@ -1,6 +1,8 @@
 package com.htt.billing.common
 
 import com.htt.billing.common.error.ValidationException
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 
@@ -26,6 +28,19 @@ object Inputs {
 
     fun optionalDate(value: String?, field: String): LocalDate? =
         optionalText(value)?.let { parseDate(it, field) }
+
+    /**
+     * Money in, cents out. Text rather than a number because a JSON number coerces
+     * as written and 150.00 would arrive as a double.
+     */
+    fun requiredMoney(value: String, field: String): BigDecimal {
+        val text = requiredText(value, field)
+        return try {
+            BigDecimal(text).setScale(2, RoundingMode.HALF_UP)
+        } catch (notANumber: NumberFormatException) {
+            throw ValidationException("$field must be a number")
+        }
+    }
 
     /**
      * A LIKE pattern for a name or code search. The metacharacters are escaped so

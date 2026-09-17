@@ -1,6 +1,7 @@
 package com.htt.billing.demo
 
 import com.htt.billing.audit.AuditRepository
+import com.htt.billing.claim.ClaimRepository
 import com.htt.billing.common.error.ServerErrorException
 import com.htt.billing.coverage.CoverageRepository
 import com.htt.billing.coverage.PayerRepository
@@ -26,8 +27,9 @@ import org.springframework.transaction.support.TransactionTemplate
  * them would turn a data reset into an environment wipe. The practice row itself
  * survives for the same reason: audit events point at it.
  *
- * Claims, adjudications, payments and work items do not exist yet. When they do,
- * clearing them belongs in [apply], next to the statements already there.
+ * Claims go first. Everything a claim points at — its lines, its diagnoses, its
+ * adjudications and its payments — cascades from the claim row, while patients and
+ * coverages are referenced by claims and cannot be deleted before them.
  */
 @Service
 class DemoResetService(
@@ -36,6 +38,7 @@ class DemoResetService(
     private val providers: ProviderRepository,
     private val coverages: CoverageRepository,
     private val payers: PayerRepository,
+    private val claims: ClaimRepository,
     private val users: UserRepository,
     private val rbac: RbacRepository,
     private val authorization: AuthorizationService,
@@ -95,6 +98,7 @@ class DemoResetService(
                 DemoDataset.ORGANIZATION_TAX_ID,
             ).id
 
+        claims.deleteInOrganization(organizationId)
         coverages.deleteInOrganization(organizationId)
         patients.deleteInOrganization(organizationId)
         providers.deleteInOrganization(organizationId)

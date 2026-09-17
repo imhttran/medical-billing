@@ -3,6 +3,7 @@ package com.htt.billing.patient
 import com.htt.billing.common.Api
 import com.htt.billing.identity.AuthUser
 import com.htt.billing.patient.dto.PatientBody
+import com.htt.billing.payment.PaymentService
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
@@ -24,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController
  */
 @RestController
 @RequestMapping("/api/patients")
-class PatientController(private val patients: PatientService) {
+class PatientController(private val patients: PatientService, private val payments: PaymentService) {
 
     @GetMapping
     fun listPatients(
@@ -39,6 +40,16 @@ class PatientController(private val patients: PatientService) {
     fun getPatient(user: AuthUser, @PathVariable("id") id: String): ResponseEntity<Any> = Api.respond(
         HttpStatus.OK,
         mapOf("patient" to patients.get(user.id, Api.parseId(id, "patient id"))),
+    )
+
+    /**
+     * What the patient still owes, across every claim, with the claims that make it
+     * up. Computed from the adjudications and the payments, never stored.
+     */
+    @GetMapping("/{id}/balance")
+    fun getBalance(user: AuthUser, @PathVariable("id") id: String): ResponseEntity<Any> = Api.respond(
+        HttpStatus.OK,
+        mapOf("balance" to payments.patientBalance(user.id, Api.parseId(id, "patient id"))),
     )
 
     @PostMapping

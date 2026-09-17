@@ -42,6 +42,14 @@ type Coverage = {
 
 type Payer = { id: number; name: string; payerCode: string };
 
+/** What this patient still owes, per claim. The server computes all of it. */
+type Balance = {
+  balance: number;
+  claims: { claimId: number; claimNumber: string; balance: number }[];
+};
+
+const money = (value: number) => value.toFixed(2);
+
 const SEXES = ["", "MALE", "FEMALE", "OTHER", "UNKNOWN"];
 
 // A PUT replaces the whole coverage, so every field goes back rather than just
@@ -67,6 +75,7 @@ export default function PatientDetailPage() {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [coverages, setCoverages] = useState<Coverage[] | null>(null);
   const [payers, setPayers] = useState<Payer[]>([]);
+  const [balance, setBalance] = useState<Balance | null>(null);
   const [failed, setFailed] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -78,28 +87,38 @@ export default function PatientDetailPage() {
     async (authToken: string) => {
       try {
         const headers = { Authorization: `Bearer ${authToken}` };
-        const [patientResponse, coverageResponse, payerResponse] =
-          await Promise.all([
-            fetch(`${API_BASE}/api/patients/${patientId}`, { headers }),
-            fetch(`${API_BASE}/api/patients/${patientId}/coverages`, {
-              headers,
-            }),
-            fetch(`${API_BASE}/api/payers`, { headers }),
-          ]);
-        [patientResponse, coverageResponse, payerResponse].forEach(
-          renewSessionFrom,
-        );
+        const [
+          patientResponse,
+          coverageResponse,
+          payerResponse,
+          balanceResponse,
+        ] = await Promise.all([
+          fetch(`${API_BASE}/api/patients/${patientId}`, { headers }),
+          fetch(`${API_BASE}/api/patients/${patientId}/coverages`, {
+            headers,
+          }),
+          fetch(`${API_BASE}/api/payers`, { headers }),
+          fetch(`${API_BASE}/api/patients/${patientId}/balance`, { headers }),
+        ]);
+        [
+          patientResponse,
+          coverageResponse,
+          payerResponse,
+          balanceResponse,
+        ].forEach(renewSessionFrom);
 
         const patientData = await patientResponse.json();
         if (!patientResponse.ok) throw new Error(patientData.message);
         setPatient(patientData.patient);
 
-        // Coverage and payers are secondary: a user who may read the patient but
-        // not their coverage should still see the details.
+        // Coverage, payers and the balance are secondary: a user who may read the
+        // patient but not their coverage should still see the details.
         const coverageData = await coverageResponse.json();
         setCoverages(coverageResponse.ok ? coverageData.coverages : []);
         const payerData = await payerResponse.json();
         setPayers(payerResponse.ok ? payerData.payers : []);
+        const balanceData = await balanceResponse.json();
+        setBalance(balanceResponse.ok ? balanceData.balance : null);
         setFailed(false);
       } catch {
         setFailed(true);
@@ -314,6 +333,43 @@ export default function PatientDetailPage() {
                   Save
                 </button>
               </form>
+
+              <h2>Balance</h2>
+              {balance === null ? (
+                <p>Not available.</p>
+              ) : balance.claims.length === 0 ? (
+                <p>Nothing owed.</p>
+              ) : (
+                <>
+                  <p>
+                    <strong>{money(balance.balance)}</strong> owed across{" "}
+                    {balance.claims.length} claim
+                    {balance.claims.length === 1 ? "" : "s"}.
+                  </p>
+                  <div className="table-scroll">
+                    <table className="user-table">
+                      <thead>
+                        <tr>
+                          <th>Claim</th>
+                          <th>Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {balance.claims.map((claim) => (
+                          <tr key={claim.claimId}>
+                            <td>
+                              <a href={`/claims/${claim.claimId}`}>
+                                {claim.claimNumber}
+                              </a>
+                            </td>
+                            <td>{money(claim.balance)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
 
               <h2>Coverage</h2>
               <div className="table-scroll">

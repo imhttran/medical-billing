@@ -71,6 +71,30 @@ class DemoResetTest : BillingApiTest() {
     }
 
     @Test
+    fun resetClearsTheClaimsAndPaymentsUnderThePractice() {
+        val platformAdminId = insertUser("platform-admin")
+        assign(platformAdminId, RoleCodes.PLATFORM_ADMIN, null)
+        demo.reset(platformAdminId)
+        val organizationId = demoOrganizationId(jdbc)!!
+        val patientId = demoPatientId(jdbc, organizationId)!!
+
+        // A claim and a payment on it: the rows a developing session leaves behind.
+        // The claim references the seeded patient and coverage, so a reset that does
+        // not clear claims first cannot delete either of them.
+        val claimId = insertStrayClaim(jdbc, organizationId, patientId)
+        assertNotNull(insertStrayPatientPayment(jdbc, organizationId, patientId, claimId))
+        assertEquals(1, countClaims(jdbc, organizationId))
+        assertEquals(1, countPayments(jdbc, organizationId))
+
+        demo.reset(platformAdminId)
+
+        assertEquals(0, countClaims(jdbc, organizationId)) { "a claim survived the reset" }
+        assertEquals(0, countPayments(jdbc, organizationId)) { "a payment survived the reset" }
+        assertEquals(1, countPatients(jdbc, organizationId))
+        assertEquals(1, countCoverages(jdbc, organizationId))
+    }
+
+    @Test
     fun resetIsAudited() {
         val platformAdminId = insertUser("platform-admin")
         assign(platformAdminId, RoleCodes.PLATFORM_ADMIN, null)

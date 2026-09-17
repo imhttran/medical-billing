@@ -56,10 +56,60 @@ type ClaimDetail = {
 
 type Coverage = { id: number; memberId: string; active: boolean };
 
+type InsurancePayment = {
+  id: number;
+  amount: number;
+  paymentDate: string;
+  referenceNumber: string;
+};
+
+type PatientPayment = {
+  id: number;
+  amount: number;
+  paymentMethod: string;
+  paymentDate: string;
+  referenceNumber: string | null;
+};
+
+/**
+ * The claim's money. The three figures are computed on the server from the
+ * adjudication and the payment rows, so nothing here subtracts anything.
+ */
+type Payments = {
+  insurancePayments: InsurancePayment[];
+  patientPayments: PatientPayment[];
+  patientResponsibility: number;
+  patientPaid: number;
+  balance: number;
+};
+
 type Issue = { code: string; message: string };
 
 const money = (value: number | null | undefined) =>
   value === null || value === undefined ? "—" : value.toFixed(2);
+
+const PAYMENT_METHODS = ["CASH", "CHECK", "CARD", "TRANSFER", "OTHER"];
+
+/** Today, as the date input wants it. */
+const today = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * A GET with the session token, or null when the answer is not a success. The
+ * payments are the reason: a role without PAYMENT_VIEW may see the claim and not
+ * its money, and that leaves the section off the page rather than erroring.
+ */
+async function getJson<T>(authToken: string, path: string): Promise<T | null> {
+  try {
+    const response = await fetch(`${API_BASE}${path}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    renewSessionFrom(response);
+    if (!response.ok) return null;
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
 
 export default function ClaimDetailPage() {
   const params = useParams<{ id: string }>();
@@ -68,44 +118,50 @@ export default function ClaimDetailPage() {
 
   const [detail, setDetail] = useState<ClaimDetail | null>(null);
   const [coverages, setCoverages] = useState<Coverage[]>([]);
+  const [payments, setPayments] = useState<Payments | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [failed, setFailed] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  /**
+   * The claim's money, which changes whenever the payer answers or a payment is
+   * recorded — so it is refreshed after both, not just when the page loads.
+   */
+  const loadPayments = useCallback(
+    async (authToken: string) => {
+      const money = await getJson<{ payments: Payments }>(
+        authToken,
+        `/api/claims/${claimId}/payments`,
+      );
+      setPayments(money?.payments ?? null);
+    },
+    [claimId],
+  );
+
   const load = useCallback(
     async (authToken: string) => {
-      let loaded: ClaimDetail;
-      try {
-        const response = await fetch(`${API_BASE}/api/claims/${claimId}`, {
-          headers: { Authorization: `Bearer ${authToken}` },
-        });
-        renewSessionFrom(response);
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message);
-        loaded = data as ClaimDetail;
-        setDetail(loaded);
-        setFailed(false);
-      } catch {
+      const data = await getJson<ClaimDetail>(
+        authToken,
+        `/api/claims/${claimId}`,
+      );
+      if (!data) {
         setFailed(true);
         return;
       }
+      setDetail(data);
+      setFailed(false);
+
       // The patient's coverages, so a claim can be corrected onto the right one.
-      // Without the list the edit form keeps the coverage the claim already has.
-      try {
-        const listed = await fetch(
-          `${API_BASE}/api/patients/${loaded.claim.patientId}/coverages`,
-          { headers: { Authorization: `Bearer ${authToken}` } },
-        );
-        if (listed.ok) {
-          const body = await listed.json();
-          setCoverages((body.coverages ?? []) as Coverage[]);
-        }
-      } catch {
-        setCoverages([]);
-      }
+      const listed = await getJson<{ coverages: Coverage[] }>(
+        authToken,
+        `/api/patients/${data.claim.patientId}/coverages`,
+      );
+      setCoverages(listed?.coverages ?? []);
+
+      await loadPayments(authToken);
     },
-    [claimId],
+    [claimId, loadPayments],
   );
 
   useEffect(() => {
@@ -153,6 +209,9 @@ export default function ClaimDetailPage() {
             ? "Claim marked ready."
             : "Claim submitted.",
       );
+      // Submitting is when the payer's remittance appears, and a rejection clears
+      // whatever the last one was, so the money is re-read rather than assumed.
+      await loadPayments(authToken);
     });
   };
 
@@ -196,6 +255,37 @@ export default function ClaimDetailPage() {
       }
       setDetail(body as unknown as ClaimDetail);
       setNotice("Claim saved. It can go back to the payer now.");
+      await loadPayments(authToken);
+    });
+  };
+
+  /** A hand-entered patient payment. It can settle the claim, so the answer's claim comes back too. */
+  const pay = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    setError("");
+    setNotice("");
+    withToken(async (authToken) => {
+      const { ok, data: body } = await submitJson(
+        authToken,
+        `/api/claims/${claimId}/patient-payments`,
+        "POST",
+        {
+          amount: data.get("amount"),
+          paymentMethod: data.get("paymentMethod"),
+          paymentDate: data.get("paymentDate"),
+          referenceNumber: data.get("referenceNumber"),
+        },
+      );
+      if (!ok) {
+        setError(body.message ?? "The payment could not be recorded.");
+        return;
+      }
+      form.reset();
+      setDetail(body as unknown as ClaimDetail);
+      setPayments((body.payments ?? null) as Payments | null);
+      setNotice("Payment recorded.");
     });
   };
 
@@ -449,6 +539,111 @@ export default function ClaimDetailPage() {
                       : "Not adjudicated yet. Mark the claim ready, then submit it — the simulated payer answers immediately."}
                 </p>
               )}
+
+              {payments ? (
+                <>
+                  <h2>Payments</h2>
+                  <p>
+                    Patient responsibility{" "}
+                    {money(payments.patientResponsibility)}
+                    {" · "}paid {money(payments.patientPaid)}
+                    {" · "}
+                    <strong>balance {money(payments.balance)}</strong>
+                  </p>
+
+                  <div className="table-scroll">
+                    <table className="user-table">
+                      <thead>
+                        <tr>
+                          <th>Paid by</th>
+                          <th>Amount</th>
+                          <th>Date</th>
+                          <th>Reference</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payments.insurancePayments.length === 0 &&
+                        payments.patientPayments.length === 0 ? (
+                          <tr>
+                            <td colSpan={4}>Nothing has been paid yet.</td>
+                          </tr>
+                        ) : (
+                          <>
+                            {payments.insurancePayments.map((payment) => (
+                              <tr key={`insurance-${payment.id}`}>
+                                <td>Insurance</td>
+                                <td>{money(payment.amount)}</td>
+                                <td>{payment.paymentDate}</td>
+                                <td>{payment.referenceNumber}</td>
+                              </tr>
+                            ))}
+                            {payments.patientPayments.map((payment) => (
+                              <tr key={`patient-${payment.id}`}>
+                                <td>Patient ({payment.paymentMethod})</td>
+                                <td>{money(payment.amount)}</td>
+                                <td>{payment.paymentDate}</td>
+                                <td>{payment.referenceNumber ?? "—"}</td>
+                              </tr>
+                            ))}
+                          </>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {payments.balance > 0 ? (
+                    <details>
+                      <summary>Record a patient payment</summary>
+                      <form onSubmit={pay}>
+                        <div className="input-group">
+                          <label htmlFor="amount">Amount</label>
+                          <input
+                            id="amount"
+                            name="amount"
+                            defaultValue={money(payments.balance)}
+                            required
+                          />
+                        </div>
+                        <div className="input-group">
+                          <label htmlFor="paymentMethod">Method</label>
+                          <select
+                            id="paymentMethod"
+                            name="paymentMethod"
+                            defaultValue="CASH"
+                          >
+                            {PAYMENT_METHODS.map((method) => (
+                              <option key={method} value={method}>
+                                {method}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="input-group">
+                          <label htmlFor="paymentDate">Payment date</label>
+                          <input
+                            id="paymentDate"
+                            name="paymentDate"
+                            type="date"
+                            defaultValue={today()}
+                            required
+                          />
+                        </div>
+                        <div className="input-group">
+                          <label htmlFor="referenceNumber">Reference</label>
+                          <input
+                            id="referenceNumber"
+                            name="referenceNumber"
+                            placeholder="Optional"
+                          />
+                        </div>
+                        <button type="submit" className="login-button">
+                          Record payment
+                        </button>
+                      </form>
+                    </details>
+                  ) : null}
+                </>
+              ) : null}
             </>
           ) : null}
         </div>

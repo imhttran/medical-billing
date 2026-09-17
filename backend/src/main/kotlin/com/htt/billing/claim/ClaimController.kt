@@ -3,6 +3,8 @@ package com.htt.billing.claim
 import com.htt.billing.claim.dto.ClaimBody
 import com.htt.billing.common.Api
 import com.htt.billing.identity.AuthUser
+import com.htt.billing.payment.PaymentService
+import com.htt.billing.payment.dto.PatientPaymentBody
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
@@ -19,10 +21,13 @@ import org.springframework.web.bind.annotation.RestController
  * are named actions the domain allows, and everything else about a claim goes
  * through create and update while it is still editable. Submitting does double
  * duty — a ready claim goes out, and a rejected or corrected one goes back out.
+ *
+ * The two payment routes hang off the claim because a payment is always taken
+ * against one, including the patient's.
  */
 @RestController
 @RequestMapping("/api/claims")
-class ClaimController(private val claims: ClaimService) {
+class ClaimController(private val claims: ClaimService, private val payments: PaymentService) {
 
     @GetMapping
     fun listClaims(
@@ -98,6 +103,38 @@ class ClaimController(private val claims: ClaimService) {
         return Api.respond(
             HttpStatus.OK,
             detail(submitted) + mapOf("success" to true, "message" to "Claim submitted"),
+        )
+    }
+
+    @GetMapping("/{id}/payments")
+    fun listPayments(user: AuthUser, @PathVariable("id") id: String): ResponseEntity<Any> = Api.respond(
+        HttpStatus.OK,
+        mapOf("payments" to payments.summary(user.id, Api.parseId(id, "claim id"))),
+    )
+
+    /**
+     * A hand-entered patient payment. Answers with the whole claim as well as the
+     * money, because recording one can move the claim to PARTIALLY_PAID or PAID.
+     */
+    @PostMapping("/{id}/patient-payments")
+    fun recordPatientPayment(
+        user: AuthUser,
+        @PathVariable("id") id: String,
+        @RequestBody(required = false) body: ByteArray?,
+    ): ResponseEntity<Any> {
+        val claimId = Api.parseId(id, "claim id")
+        payments.recordPatientPayment(
+            user.id,
+            claimId,
+            Api.decode(body, PatientPaymentBody::class.java),
+        )
+        return Api.respond(
+            HttpStatus.CREATED,
+            detail(claims.detail(user.id, claimId)) + mapOf(
+                "success" to true,
+                "message" to "Payment recorded",
+                "payments" to payments.summary(user.id, claimId),
+            ),
         )
     }
 

@@ -1,7 +1,6 @@
 package com.htt.billing.adjudication
 
 import com.htt.billing.claim.ClaimRepository
-import com.htt.billing.claim.ClaimStatus
 import org.springframework.stereotype.Service
 
 /**
@@ -19,10 +18,14 @@ class AdjudicationService(
 ) {
 
     /**
-     * @return the status the claim should move to, which is ADJUDICATED when any
-     *         line was paid and DENIED when none was.
+     * @return the payer's decision, priced line by line and recorded. The caller
+     *         reads the outcome and the patient responsibility off it to decide
+     *         where the claim goes next, and records the remittance that follows.
      */
-    fun adjudicate(claim: ClaimRepository.Claim, lines: List<ClaimRepository.Line>): ClaimStatus {
+    fun adjudicate(
+        claim: ClaimRepository.Claim,
+        lines: List<ClaimRepository.Line>,
+    ): AdjudicationRepository.Adjudication {
         val rates = feeSchedule.ratesFor(claim.payerId)
         val result = PayerSimulator.price(
             lines.map { PayerSimulator.LineInput(it.lineNumber, it.procedureCode, it.chargeAmount) },
@@ -44,7 +47,7 @@ class AdjudicationService(
             )
         }
 
-        adjudications.insert(
+        return adjudications.insert(
             claimId = claim.id,
             organizationId = claim.organizationId,
             outcome = if (result.anyCovered) OUTCOME_ADJUDICATED else OUTCOME_DENIED,
@@ -54,8 +57,6 @@ class AdjudicationService(
             payerResponsibility = result.payerResponsibility,
             patientResponsibility = result.patientResponsibility,
         )
-
-        return if (result.anyCovered) ClaimStatus.ADJUDICATED else ClaimStatus.DENIED
     }
 
     fun latestForClaim(claimId: Int): AdjudicationRepository.Adjudication? =

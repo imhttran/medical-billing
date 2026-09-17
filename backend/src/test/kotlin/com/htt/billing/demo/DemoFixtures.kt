@@ -24,6 +24,12 @@ internal fun countProviders(jdbc: JdbcClient, organizationId: Int): Int =
 internal fun countCoverages(jdbc: JdbcClient, organizationId: Int): Int =
     countOf(jdbc, "coverages", organizationId)
 
+internal fun countClaims(jdbc: JdbcClient, organizationId: Int): Int =
+    countOf(jdbc, "claims", organizationId)
+
+internal fun countPayments(jdbc: JdbcClient, organizationId: Int): Int =
+    countOf(jdbc, "patient_payments", organizationId) + countOf(jdbc, "insurance_payments", organizationId)
+
 /** The id of the seeded patient, so a test can prove it survived a reset. */
 internal fun demoPatientId(jdbc: JdbcClient, organizationId: Int): Int? = jdbc
     .sql(
@@ -69,9 +75,53 @@ internal fun insertStrayPatient(jdbc: JdbcClient, organizationId: Int, lastName:
     .query(Int::class.javaObjectType)
     .single()
 
+/**
+ * A claim against the seeded patient, and a payment on it, as a developer's own
+ * session would leave behind. A reset has to clear the claim before it can delete
+ * the patient and coverage the claim points at.
+ */
+internal fun insertStrayClaim(jdbc: JdbcClient, organizationId: Int, patientId: Int): Int = jdbc
+    .sql(
+        """
+        INSERT INTO claims
+            (organization_id, claim_number, patient_id, provider_id, coverage_id, payer_id, service_date)
+        SELECT :organizationId, 'CLM-STRAY', :patientId,
+               (SELECT id FROM providers WHERE organization_id = :organizationId ORDER BY id LIMIT 1),
+               (SELECT id FROM coverages WHERE patient_id = :patientId ORDER BY priority ASC LIMIT 1),
+               (SELECT id FROM payers ORDER BY id LIMIT 1),
+               DATE '2026-03-02'
+        RETURNING id
+        """,
+    )
+    .param("organizationId", organizationId)
+    .param("patientId", patientId)
+    .query(Int::class.javaObjectType)
+    .single()
+
+internal fun insertStrayPatientPayment(
+    jdbc: JdbcClient,
+    organizationId: Int,
+    patientId: Int,
+    claimId: Int,
+): Int = jdbc
+    .sql(
+        """
+        INSERT INTO patient_payments
+            (organization_id, patient_id, claim_id, amount, payment_method, payment_date)
+        VALUES (:organizationId, :patientId, :claimId, 10.00, 'CASH', DATE '2026-03-10')
+        RETURNING id
+        """,
+    )
+    .param("organizationId", organizationId)
+    .param("patientId", patientId)
+    .param("claimId", claimId)
+    .query(Int::class.javaObjectType)
+    .single()
+
 /** Removes the demo practice and everything under it, leaving no trace. */
 internal fun clearDemoData(jdbc: JdbcClient) {
     val organizationId = demoOrganizationId(jdbc) ?: return
+    jdbc.sql("DELETE FROM claims WHERE organization_id = :id").param("id", organizationId).update()
     jdbc.sql("DELETE FROM coverages WHERE organization_id = :id").param("id", organizationId).update()
     jdbc.sql("DELETE FROM patients WHERE organization_id = :id").param("id", organizationId).update()
     jdbc.sql("DELETE FROM providers WHERE organization_id = :id").param("id", organizationId).update()

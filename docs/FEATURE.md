@@ -22,13 +22,16 @@
   and are not free to redistribute
 - **Demo reset** — a deterministic synthetic practice (Jane Smith, her provider
   and her primary coverage), seeded on a development boot and rebuildable on
-  demand. The reset endpoint exists only where `app.env` is development or demo,
+  demand. A reset clears the practice's claims and their payments before the
+  patients and coverage they point at, so it works on a database someone has been
+  using. The reset endpoint exists only where `app.env` is development or demo,
   and still requires the platform-scoped `SYSTEM_RESET` permission. The seeded
   practice is granted to the local dev login, so the billing screens have
   something to show
 - **Patient screens** — patient list with name search and add, and a detail page
-  that edits the patient and manages their coverage. No practice picker: the
-  server derives it from the caller's grants
+  that edits the patient, manages their coverage, and shows what the patient owes
+  across their claims. No practice picker: the server derives it from the caller's
+  grants
 - **Claims and adjudication** — a claim with its diagnoses and service lines,
   a state machine that owns every status change, validation with coded issues,
   and a deterministic simulated payer that prices a submitted claim and records
@@ -41,9 +44,17 @@
   and resubmitting sends it back for a fresh answer. This is the one payer rule
   validation deliberately does not pre-empt, because eligibility is the payer's
   determination rather than a question about the claim itself
+- **Payments and balances** — the payer's remittance is recorded with its answer,
+  and the patient's payments are entered by hand against the claim they settle.
+  A claim that still owes something is PARTIALLY_PAID, one that owes nothing is
+  PAID. No balance is stored anywhere: every figure is the adjudication minus the
+  payments, summed on read, so a payment cannot leave a total behind that
+  disagrees with it. A payment larger than the balance is refused rather than
+  carried as a credit
 - **Claim screens** — a claim list with a one-screen way to start a claim, and a
   claim page with Validate, Mark ready and Submit plus the payer's answer, the
-  payer's reason when it refused the claim, and a Resubmit
+  payer's reason when it refused the claim, a Resubmit, and the payments with
+  their balance and a form to record one
 - **Onboarding gates** — forced password change and required profile block
   API access until completed
 - **Admin user management** — create, delete, verify/unverify, change role,

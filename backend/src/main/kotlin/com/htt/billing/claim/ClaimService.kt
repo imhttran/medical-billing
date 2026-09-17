@@ -12,10 +12,10 @@ import com.htt.billing.common.error.Issue
 import com.htt.billing.common.error.NotFoundException
 import com.htt.billing.common.error.ValidationException
 import com.htt.billing.common.error.ValidationIssuesException
+import com.htt.billing.payment.PaymentService
 import com.htt.billing.security.AuthorizationService
 import com.htt.billing.security.Permissions
 import java.math.BigDecimal
-import java.math.RoundingMode
 import java.time.Instant
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
@@ -36,6 +36,7 @@ class ClaimService(
     private val facts: ClaimFacts,
     private val authorization: AuthorizationService,
     private val adjudication: AdjudicationService,
+    private val payments: PaymentService,
     private val transactions: TransactionTemplate,
 ) {
 
@@ -154,10 +155,11 @@ class ClaimService(
      * SUBMITTED is not a move the state machine has — validating and submitting
      * are separate steps on purpose.
      *
-     * The payer answers one of two ways. It accepts the claim and prices it, or it
-     * rejects it without pricing anything: a rejection is about eligibility, not
-     * about what the services are worth, so no adjudication is written and the
-     * lines keep the figures they had, which is none.
+     * The payer answers one of three ways. It accepts the claim and prices it, and
+     * the money it says it owes is recorded with the answer, because the simulated
+     * payer pays as it decides. Or it accepts and prices everything as not covered,
+     * which is a denial. Or it refuses to process the claim at all, which is a
+     * rejection: nothing is priced, so no adjudication and no payment are written.
      */
     fun submit(userId: Int, claimId: Int): Detail {
         val claim = requireVisible(userId, claimId)
@@ -192,13 +194,7 @@ class ClaimService(
 
             val rejection = eligibilityRejection(claim)
             result = if (rejection == null) {
-                ClaimStatus.requireMove(outgoing, ClaimStatus.ACCEPTED)
-                val accepted = claims.updateStatus(claimId, ClaimStatus.ACCEPTED, submittedAt = null)
-                    ?: throw NotFoundException("Claim not found")
-                val outcome = adjudication.adjudicate(accepted, claims.findLines(claimId))
-                ClaimStatus.requireMove(ClaimStatus.ACCEPTED, outcome)
-                claims.updateStatus(claimId, outcome, submittedAt = null)
-                    ?: throw NotFoundException("Claim not found")
+                takeThePayersAnswer(claimId, outgoing)
             } else {
                 ClaimStatus.requireMove(outgoing, ClaimStatus.REJECTED)
                 claims.updateStatus(
@@ -211,6 +207,39 @@ class ClaimService(
             }
         }
         return detailOf(checkNotNull(result))
+    }
+
+    /**
+     * Accept, price, and settle the claim's status against what the answer says is
+     * outstanding.
+     *
+     * A denial is where the payer allowed nothing. Otherwise the payer paid its
+     * share as it answered, so the only money still owed is the patient's: a claim
+     * with a patient responsibility is ADJUDICATED and awaiting it, and one without
+     * is PAID because nothing is outstanding at all.
+     */
+    private fun takeThePayersAnswer(claimId: Int, outgoing: ClaimStatus): Claim {
+        ClaimStatus.requireMove(outgoing, ClaimStatus.ACCEPTED)
+        val accepted = claims.updateStatus(claimId, ClaimStatus.ACCEPTED, submittedAt = null)
+            ?: throw NotFoundException("Claim not found")
+
+        val answer = adjudication.adjudicate(accepted, claims.findLines(claimId))
+        payments.recordInsurancePayment(
+            claimId = claimId,
+            organizationId = accepted.organizationId,
+            claimNumber = accepted.claimNumber,
+            submissionVersion = accepted.submissionVersion,
+            amount = answer.payerResponsibility,
+        )
+
+        val outcome = when {
+            answer.outcome == AdjudicationService.OUTCOME_DENIED -> ClaimStatus.DENIED
+            answer.patientResponsibility.signum() > 0 -> ClaimStatus.ADJUDICATED
+            else -> ClaimStatus.PAID
+        }
+        ClaimStatus.requireMove(ClaimStatus.ACCEPTED, outcome)
+        return claims.updateStatus(claimId, outcome, submittedAt = null)
+            ?: throw NotFoundException("Claim not found")
     }
 
     /** The payer's eligibility check, which validation deliberately does not pre-empt. */
@@ -278,15 +307,5 @@ class ClaimService(
         }
 
     /** Text in, BigDecimal out: a JSON number coerces as written, so 150.00 stays exact. */
-    private fun parseCharge(raw: String): BigDecimal {
-        val text = raw.trim()
-        if (text.isEmpty()) {
-            throw ValidationException("chargeAmount is required on every line")
-        }
-        return try {
-            BigDecimal(text).setScale(2, RoundingMode.HALF_UP)
-        } catch (notANumber: NumberFormatException) {
-            throw ValidationException("chargeAmount must be a number")
-        }
-    }
+    private fun parseCharge(raw: String): BigDecimal = Inputs.requiredMoney(raw, "chargeAmount")
 }
