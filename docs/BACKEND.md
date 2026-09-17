@@ -102,9 +102,13 @@ test; changing one breaks behavior the tests guarantee.
 4. **`JWT_SECRET` must be at least 32 bytes** — the app checks this while
    building `JwtService` and refuses to start on a shorter secret, because a
    short HMAC key is brute-forceable.
-5. **The role gate lives in the controllers** — deliberately, because the check
-   has to run _before_ the path id is parsed. Order is visible:
-   `DELETE /api/users/abc` as a non-admin is a 403, not a 400.
+5. **The permission gate lives in the controllers, and the tenant check does
+   not** — the gate is in the controller deliberately, because it has to run
+   _before_ the path id is parsed. Order is visible: `DELETE /api/users/abc`
+   without `USER_DISABLE` is a 403, not a 400. What a permission cannot answer is
+   which accounts a caller may touch, since both administrators hold `USER_VIEW`,
+   so that half lives in `UserAdminService` and `RoleAdminService` and answers 404
+   for an account in another practice.
 6. **`created_at` serialises as an ISO-8601 UTC instant** — the admin user list
    carries `createdAt` as e.g. `2026-01-01T00:00:00Z`. Jackson's timestamp output
    is disabled, so an `Instant` renders that way.

@@ -43,7 +43,7 @@
   before the patients and coverage they point at, so it works on a database
   someone has been using. The reset endpoint exists only where `app.env` is
   development or demo, and still requires the platform-scoped `SYSTEM_RESET`
-  permission. The seeded practice is granted to the local dev login, so the
+  permission. The seeded practice is granted to the local dev logins, so the
   billing screens have something to show
 - **Patient screens** — patient list with name search and add, and a detail page
   that edits the patient, manages their coverage, and shows what the patient owes
@@ -90,9 +90,9 @@
   from the resource, and its payer comes from its coverage
 - **Onboarding gates** — forced password change and required profile block
   API access until completed
-- **Admin user management** — create, delete, verify/unverify, change role,
+- **Admin user management** — create, delete, verify/unverify, assign a role,
   trigger password resets, and see each account's billing roles, all from the
-  dashboard
+  dashboard. Confined to the caller's own practices
 - **Email queue** — Postgres-backed queue with a bounded-retry worker; logs to
   stdout when no SMTP is configured, so dev needs no mail server
 - **Enumeration-safe endpoints** — generic responses on signup/forgot-password

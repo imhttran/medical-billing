@@ -19,8 +19,7 @@ or point `DATABASE_URL` at whatever you have. The hyphens are legal in a Postgre
 name but SQL has to quote them, e.g. `DROP DATABASE "htt-billing-db"`.
 
 - `manage.sh` (reset-database, backend startup check) reads `.env` first, then
-  `.env.dev`. `set-role` is the exception: it reads `DATABASE_URL` from the
-  environment and deliberately ignores the `.env` files.
+  `.env.dev`.
 - Changing host/port/db means changing only this URL — no code changes. Under
   `docker compose` the API connects to `db:5432` instead of `localhost`.
 
@@ -57,7 +56,8 @@ Flyway, applied automatically when the Spring API boots:
   seeded terminology, `V4` claims, their diagnoses and lines, adjudications and the
   payer fee schedule, `V5` the practice administrator's claim permissions, `V6`
   claim rejection, `V7` the payments, `V8` the work items, `V9` the deliberately
-  unpriced demo service, and `V10` the provider external id FHIR reconciles on.
+  unpriced demo service, `V10` the provider external id FHIR reconciles on, and
+  `V11` drops the ranked `users.role` column.
   Flyway reads that location on every boot and records what it applied in a
   `flyway_schema_history` table — a second boot is a no-op, so there's no
   separate migrate step.
@@ -67,7 +67,7 @@ Flyway, applied automatically when the Spring API boots:
   refuse to start. Baselining records a starting point instead, and since every
   migration is `IF NOT EXISTS`, either path is a no-op against an
   already-migrated database.
-- Schema changes: add a `V11__*.sql` file, numbered after the last one. There is
+- Schema changes: add a `V12__*.sql` file, numbered after the last one. There is
   no list to keep in sync — the filename is the registration.
 - Never edit a migration that has already been applied. Flyway checksums the
   files, and a changed checksum fails validation on the next boot. A mistake goes
@@ -77,7 +77,7 @@ Tables:
 
 | Table                   | Purpose                                                              |
 | ----------------------- | -------------------------------------------------------------------- |
-| `users`                 | accounts: email, scrypt password, role, verify/reset tokens          |
+| `users`                 | accounts: email, scrypt password, verify/reset tokens                |
 | `user_profiles`         | one-time registration details (`ON DELETE CASCADE`)                  |
 | `email_queue`           | outbound mail (drained by the `@Scheduled` worker)                   |
 | `user_devices`          | trusted 2FA devices that skip the login code                         |
@@ -141,14 +141,14 @@ reset endpoint.
 
 ## Day-to-day operations
 
-| Task               | Command                                                                                      |
-| ------------------ | -------------------------------------------------------------------------------------------- |
-| Status             | `pg_isready -h localhost` or `./manage.sh status`                                            |
-| Reset **all** data | `./manage.sh db:reset` (drops and recreates the `public` schema)                             |
-| Manual reset       | `psql "$DATABASE_URL" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'`                |
-| Re-seed            | `./manage.sh db:reseed` (drop schema, restart the backend so Flyway re-applies and re-seeds) |
-| Look around        | `psql "htt-billing-db" -U postgres` → `\dt`, `\d users`                                      |
-| Promote a user     | `./manage.sh role <email> <role>` (`java -jar build/libs/app.jar set-role`)                  |
+| Task               | Command                                                                                                                         |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Status             | `pg_isready -h localhost` or `./manage.sh status`                                                                               |
+| Reset **all** data | `./manage.sh db:reset` (drops and recreates the `public` schema)                                                                |
+| Manual reset       | `psql "$DATABASE_URL" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'`                                                   |
+| Re-seed            | `./manage.sh db:reseed` (drop schema, restart the backend so Flyway re-applies and re-seeds)                                    |
+| Look around        | `psql "htt-billing-db" -U postgres` → `\dt`, `\d users`                                                                         |
+| Grant a role       | Add User in the dashboard, which assigns one with the account, or `POST /api/users/{id}/roles`. Audited in the same transaction |
 
 `db:reset` asks for lowercase `yes` since `DROP SCHEMA public
 CASCADE` destroys all data, including the Flyway history — the next boot

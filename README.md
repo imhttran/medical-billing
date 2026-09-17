@@ -43,17 +43,16 @@ up a local instance, and what an older `.env` needs.
 `make` is a thin wrapper over `./manage.sh`, which owns the steps — so there is
 one implementation of each:
 
-| Task     | Docker (primary)                          | Native                                  |
-| -------- | ----------------------------------------- | --------------------------------------- |
-| start    | `make up` (`./manage.sh compose:up`)      | `make native-up` (`./manage.sh up`)     |
-| stop     | `make down`                               | `make native-down` (`./manage.sh down`) |
-| logs     | `make logs WHAT=api`                      | `make native-logs WHAT=backend`         |
-| status   | `make status` — reports either path       | `./manage.sh status`                    |
-| tests    | `make test`                               | `./manage.sh test`                      |
-| build    | `make build` (API jar + frontend bundle)  | `./manage.sh build`                     |
-| db reset | `make db-reset YES=1`                     | `./manage.sh db:reset`                  |
-| re-seed  | `make db-reseed YES=1`                    | `./manage.sh db:reseed`                 |
-| role     | `make role EMAIL=you@mail.com ROLE=admin` | `./manage.sh role <email> <role>`       |
+| Task     | Docker (primary)                         | Native                                  |
+| -------- | ---------------------------------------- | --------------------------------------- |
+| start    | `make up` (`./manage.sh compose:up`)     | `make native-up` (`./manage.sh up`)     |
+| stop     | `make down`                              | `make native-down` (`./manage.sh down`) |
+| logs     | `make logs WHAT=api`                     | `make native-logs WHAT=backend`         |
+| status   | `make status` — reports either path      | `./manage.sh status`                    |
+| tests    | `make test`                              | `./manage.sh test`                      |
+| build    | `make build` (API jar + frontend bundle) | `./manage.sh build`                     |
+| db reset | `make db-reset YES=1`                    | `./manage.sh db:reset`                  |
+| re-seed  | `make db-reseed YES=1`                   | `./manage.sh db:reseed`                 |
 
 `make help` and `./manage.sh help` list every target and subcommand;
 `./manage.sh` with no argument prints the same list as `help`.
@@ -124,16 +123,16 @@ sit in their layer's package with the capability as the sub-package, so
 
 What stays in a capability package is what belongs to no layer:
 
-| Package        | What's in it                                                                                                                                |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `identity`     | the platform user's plumbing: the token gate, scrypt hashing, the mailer and its queue worker, roles, tokens, and the `set-role` subcommand |
-| `security`     | the permission catalogue the roles are built from                                                                                           |
-| `claim`        | the claim's status machine, its validation, and the facts it refers to                                                                      |
-| `adjudication` | the simulated payer's rules                                                                                                                 |
-| `payment`      | the one place a balance is subtracted                                                                                                       |
-| `fhir`         | the R4 mapping and the resources it builds                                                                                                  |
-| `demo`         | the synthetic dataset                                                                                                                       |
-| `common`       | HTTP plumbing (`Api`, the exception handler, `Inputs`) and app config                                                                       |
+| Package        | What's in it                                                                                          |
+| -------------- | ----------------------------------------------------------------------------------------------------- |
+| `identity`     | the platform user's plumbing: the token gate, scrypt hashing, the mailer and its queue worker, tokens |
+| `security`     | the permission catalogue the roles are built from, and the roles themselves                           |
+| `claim`        | the claim's status machine, its validation, and the facts it refers to                                |
+| `adjudication` | the simulated payer's rules                                                                           |
+| `payment`      | the one place a balance is subtracted                                                                 |
+| `fhir`         | the R4 mapping and the resources it builds                                                            |
+| `demo`         | the synthetic dataset                                                                                 |
+| `common`       | HTTP plumbing (`Api`, the exception handler, `Inputs`) and app config                                 |
 
 Repositories are one class per table group, raw SQL through `JdbcClient`.
 
