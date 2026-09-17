@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useParams } from "next/navigation";
 import { getJson, submitJson } from "@/lib/api";
+import { money } from "@/lib/money";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -47,8 +48,6 @@ type Balance = {
   balance: number;
   claims: { claimId: number; claimNumber: string; balance: number }[];
 };
-
-const money = (value: number) => value.toFixed(2);
 
 const SEXES = ["", "MALE", "FEMALE", "OTHER", "UNKNOWN"];
 
@@ -223,13 +222,13 @@ export default function PatientDetailPage() {
           patient ? `${patient.lastName}, ${patient.firstName}` : "Patient"
         }
         subtitle={patient ? `Born ${patient.dateOfBirth}` : "Loading…"}
+        nav={
+          <>
+            <a href="/patients">Patients</a>
+            <a href="/work-queue">Work queue</a>
+          </>
+        }
       >
-        <a className="logout-link" href="/patients">
-          Patients
-        </a>
-        <a className="logout-link" href="/work-queue">
-          Work queue
-        </a>
         <a className="logout-link" href="/" onClick={logout}>
           Logout
         </a>

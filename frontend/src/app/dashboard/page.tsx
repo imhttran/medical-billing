@@ -288,21 +288,13 @@ export default function DashboardPage() {
             !
           </>
         }
+        nav={
+          <>
+            <a href="/patients">Patients</a>
+            <a href="/work-queue">Work queue</a>
+          </>
+        }
       >
-        <a
-          className="logout-link"
-          href="/patients"
-          style={{ marginRight: "1rem" }}
-        >
-          Patients
-        </a>
-        <a
-          className="logout-link"
-          href="/work-queue"
-          style={{ marginRight: "1rem" }}
-        >
-          Work queue
-        </a>
         <a className="logout-link" href="/" onClick={logout}>
           Logout
         </a>
@@ -319,12 +311,14 @@ export default function DashboardPage() {
                   <input
                     type="email"
                     name="email"
+                    aria-label="Email"
                     placeholder="Email"
                     required
                   />
                   <input
                     type="password"
                     name="password"
+                    aria-label="Temporary password"
                     placeholder="Temporary password"
                     required
                   />

@@ -98,16 +98,14 @@ export default function AuditPage() {
       <PageHeader
         title="Audit trail"
         subtitle="What was done in your practices, in the order it happened"
+        nav={
+          <>
+            <a href="/claims">Claims</a>
+            <a href="/patients">Patients</a>
+            <a href="/work-queue">Work queue</a>
+          </>
+        }
       >
-        <a className="logout-link" href="/claims">
-          Claims
-        </a>
-        <a className="logout-link" href="/patients">
-          Patients
-        </a>
-        <a className="logout-link" href="/work-queue">
-          Work queue
-        </a>
         <a className="logout-link" href="/" onClick={logout}>
           Logout
         </a>

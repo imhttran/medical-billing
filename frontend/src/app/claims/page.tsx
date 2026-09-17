@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { getJson, submitJson } from "@/lib/api";
+import { money } from "@/lib/money";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -177,35 +178,15 @@ export default function ClaimsPage() {
             "Loading…"
           )
         }
+        nav={
+          <>
+            <a href="/patients">Patients</a>
+            <a href="/work-queue">Work queue</a>
+            <a href="/dashboard">Dashboard</a>
+            <a href="/audit">Audit trail</a>
+          </>
+        }
       >
-        <a
-          className="logout-link"
-          href="/patients"
-          style={{ marginRight: "1rem" }}
-        >
-          Patients
-        </a>
-        <a
-          className="logout-link"
-          href="/work-queue"
-          style={{ marginRight: "1rem" }}
-        >
-          Work queue
-        </a>
-        <a
-          className="logout-link"
-          href="/dashboard"
-          style={{ marginRight: "1rem" }}
-        >
-          Dashboard
-        </a>
-        <a
-          className="logout-link"
-          href="/audit"
-          style={{ marginRight: "1rem" }}
-        >
-          Audit trail
-        </a>
         <a className="logout-link" href="/" onClick={logout}>
           Logout
         </a>
@@ -213,8 +194,6 @@ export default function ClaimsPage() {
 
       <div className="dashboard-card">
         <div className="user-list-section">
-          <h2>Claims</h2>
-
           <details ref={addSectionRef}>
             <summary className="add-user-toggle">New Claim</summary>
             <form ref={addFormRef} onSubmit={handleAdd}>
@@ -371,7 +350,7 @@ export default function ClaimsPage() {
                       <td>{patientName(summary.claim.patientId)}</td>
                       <td>{summary.claim.serviceDate ?? "—"}</td>
                       <td>{summary.claim.status}</td>
-                      <td>{summary.totalCharge}</td>
+                      <td>{money(summary.totalCharge)}</td>
                     </tr>
                   ))
                 )}

@@ -112,35 +112,15 @@ export default function PatientsPage() {
             "Loading…"
           )
         }
+        nav={
+          <>
+            <a href="/claims">Claims</a>
+            <a href="/work-queue">Work queue</a>
+            <a href="/dashboard">Dashboard</a>
+            <a href="/audit">Audit trail</a>
+          </>
+        }
       >
-        <a
-          className="logout-link"
-          href="/claims"
-          style={{ marginRight: "1rem" }}
-        >
-          Claims
-        </a>
-        <a
-          className="logout-link"
-          href="/work-queue"
-          style={{ marginRight: "1rem" }}
-        >
-          Work queue
-        </a>
-        <a
-          className="logout-link"
-          href="/dashboard"
-          style={{ marginRight: "1rem" }}
-        >
-          Dashboard
-        </a>
-        <a
-          className="logout-link"
-          href="/audit"
-          style={{ marginRight: "1rem" }}
-        >
-          Audit trail
-        </a>
         <a className="logout-link" href="/" onClick={logout}>
           Logout
         </a>
@@ -148,12 +128,11 @@ export default function PatientsPage() {
 
       <div className="dashboard-card">
         <div className="user-list-section">
-          <h2>Patients</h2>
-
           <form className="add-user-form" onSubmit={handleSearch}>
             <input
               type="search"
               name="query"
+              aria-label="Search patients by name"
               placeholder="Search by name"
               defaultValue={search}
             />

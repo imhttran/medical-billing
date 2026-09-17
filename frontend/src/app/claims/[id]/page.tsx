@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useParams } from "next/navigation";
 import { getJson, submitJson } from "@/lib/api";
+import { decimal, money } from "@/lib/money";
 import { useSession } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { PageFooter } from "@/components/PageFooter";
@@ -84,9 +85,6 @@ type Payments = {
 };
 
 type Issue = { code: string; message: string };
-
-const money = (value: number | null | undefined) =>
-  value === null || value === undefined ? "—" : value.toFixed(2);
 
 const PAYMENT_METHODS = ["CASH", "CHECK", "CARD", "TRANSFER", "OTHER"];
 
@@ -296,13 +294,13 @@ export default function ClaimDetailPage() {
             ? `${status} · service date ${detail.claim.serviceDate ?? "not set"}`
             : "Loading…"
         }
+        nav={
+          <>
+            <a href="/claims">Claims</a>
+            <a href="/work-queue">Work queue</a>
+          </>
+        }
       >
-        <a className="logout-link" href="/claims">
-          Claims
-        </a>
-        <a className="logout-link" href="/work-queue">
-          Work queue
-        </a>
         <a className="logout-link" href="/" onClick={logout}>
           Logout
         </a>
@@ -587,7 +585,7 @@ export default function ClaimDetailPage() {
                           <input
                             id="amount"
                             name="amount"
-                            defaultValue={money(payments.balance)}
+                            defaultValue={decimal(payments.balance)}
                             required
                           />
                         </div>
