@@ -304,13 +304,12 @@ body {
 }
 
 .login-button {
-  width: 100%;
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-4);
   background-color: var(--primary-color);
   color: var(--on-primary);
   border: none;
   border-radius: var(--radius);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
   transition:
@@ -318,18 +317,30 @@ body {
     transform var(--dur-fast) var(--ease-out);
 }
 
-/* The auth card is the front door, so its one action carries the reference's
-   CTA glow. Everywhere else the primary button stays flat, a glow on a form
-   submit sitting inside a table is noise. */
+/* The auth card is the front door. Its one action is the full-width button the
+   card is built around, and the only place the reference's CTA glow appears —
+   a glow on a form submit sitting inside a table is noise. */
 .login-container .login-button {
+  width: 100%;
+  padding: var(--space-3);
+  font-size: var(--text-base);
   box-shadow: var(--primary-glow);
 }
 
-.login-button:hover {
+.login-button:hover:not(:disabled) {
   background-color: var(--primary-hover);
 }
 
-.login-button:active {
+/* A claim's actions are gated on its status, so the one that isn't available
+   yet has to read as unavailable rather than as a second live button. Faded
+   blue would drop the label to about 2.1:1, so it goes flat instead. */
+.login-button:disabled {
+  background-color: var(--raised-color);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.login-button:active:not(:disabled) {
   transform: scale(0.96);
 }
 
@@ -352,6 +363,16 @@ body {
 
 .form-footer p {
   color: var(--text-muted);
+}
+
+/* A claim's actions, a row of buttons. .form-footer is a column for the link
+   lines the auth pages put in it, so a row of buttons needs its own gap rather
+   than the single text space that lands between two inline buttons. */
+.action-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 /* Dashboard Styles */
@@ -526,11 +547,6 @@ body {
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   font-size: var(--text-sm);
-}
-
-.add-user-form .login-button {
-  width: auto;
-  padding: var(--space-2) var(--space-4);
 }
 
 /* Horizontal scroll instead of blowing out the page layout when the table

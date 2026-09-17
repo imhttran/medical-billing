@@ -335,14 +335,14 @@ export default function ClaimDetailPage() {
 
               {editable ? (
                 <div className="form-footer">
-                  <div>
+                  <div className="action-row">
                     <button
                       type="button"
                       className="link-button"
                       onClick={() => act("validate")}
                     >
                       Validate
-                    </button>{" "}
+                    </button>
                     <button
                       type="button"
                       className="login-button"
@@ -350,7 +350,7 @@ export default function ClaimDetailPage() {
                       disabled={status === "READY"}
                     >
                       Mark ready
-                    </button>{" "}
+                    </button>
                     <button
                       type="button"
                       className="login-button"
@@ -365,7 +365,7 @@ export default function ClaimDetailPage() {
 
               {resubmittable ? (
                 <div className="form-footer">
-                  <div>
+                  <div className="action-row">
                     <button
                       type="button"
                       className="login-button"
