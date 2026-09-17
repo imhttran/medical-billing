@@ -288,12 +288,7 @@ export default function DashboardPage() {
             !
           </>
         }
-        nav={
-          <>
-            <a href="/patients">Patients</a>
-            <a href="/work-queue">Work queue</a>
-          </>
-        }
+        current="/dashboard"
       >
         <a className="logout-link" href="/" onClick={logout}>
           Logout
@@ -307,11 +302,16 @@ export default function DashboardPage() {
             {isAdmin && (
               <details ref={addUserDetailsRef}>
                 <summary className="add-user-toggle">Add User</summary>
-                <form className="add-user-form" onSubmit={handleAddUser}>
+                <form
+                  className="add-user-form"
+                  onSubmit={handleAddUser}
+                  autoComplete="off"
+                >
                   <input
                     type="email"
                     name="email"
                     aria-label="Email"
+                    autoComplete="off"
                     placeholder="Email"
                     required
                   />
@@ -319,6 +319,7 @@ export default function DashboardPage() {
                     type="password"
                     name="password"
                     aria-label="Temporary password"
+                    autoComplete="new-password"
                     placeholder="Temporary password"
                     required
                   />

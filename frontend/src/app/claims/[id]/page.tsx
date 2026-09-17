@@ -294,12 +294,7 @@ export default function ClaimDetailPage() {
             ? `${status} · service date ${detail.claim.serviceDate ?? "not set"}`
             : "Loading…"
         }
-        nav={
-          <>
-            <a href="/claims">Claims</a>
-            <a href="/work-queue">Work queue</a>
-          </>
-        }
+        current="/claims"
       >
         <a className="logout-link" href="/" onClick={logout}>
           Logout

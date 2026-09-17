@@ -94,13 +94,7 @@ export default function WorkQueuePage() {
       <PageHeader
         title="Work queue"
         subtitle="What the payers' answers left for someone to do"
-        nav={
-          <>
-            <a href="/claims">Claims</a>
-            <a href="/patients">Patients</a>
-            <a href="/audit">Audit trail</a>
-          </>
-        }
+        current="/work-queue"
       >
         <a className="logout-link" href="/" onClick={logout}>
           Logout

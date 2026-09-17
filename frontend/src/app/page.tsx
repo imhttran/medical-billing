@@ -275,6 +275,7 @@ export default function LoginPage() {
               type="email"
               id="signup-email"
               name="email"
+              autoComplete="off"
               placeholder="Enter your email"
               required
             />
@@ -286,6 +287,7 @@ export default function LoginPage() {
               type="password"
               id="signup-password"
               name="password"
+              autoComplete="new-password"
               placeholder="Min 8 chars, 1 upper, 1 num, 1 special"
               required
             />
@@ -297,6 +299,7 @@ export default function LoginPage() {
               type="password"
               id="signup-confirm-password"
               name="confirmPassword"
+              autoComplete="new-password"
               placeholder="Re-enter your password"
               required
             />

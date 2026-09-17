@@ -222,12 +222,7 @@ export default function PatientDetailPage() {
           patient ? `${patient.lastName}, ${patient.firstName}` : "Patient"
         }
         subtitle={patient ? `Born ${patient.dateOfBirth}` : "Loading…"}
-        nav={
-          <>
-            <a href="/patients">Patients</a>
-            <a href="/work-queue">Work queue</a>
-          </>
-        }
+        current="/patients"
       >
         <a className="logout-link" href="/" onClick={logout}>
           Logout

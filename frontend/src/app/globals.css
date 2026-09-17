@@ -1,30 +1,23 @@
 :root {
   color-scheme: light;
 
-  /* UT Austin navy scale — anchored on the reference image's deep navy #001020 */
-  --navy-950: #000a14;
+  /* UT Austin navy scale, anchored on the reference image's deep navy #001020.
+     Only the steps the semantic tokens below actually reach for. */
   --navy-900: #001020;
   --navy-800: #061729;
   --navy-700: #0b2030;
   --navy-600: #12304a;
   --navy-500: #1b4260;
-  --navy-400: #2e5a7a;
   --navy-350: #456d8c;
-  --navy-300: #5a7e99;
   --navy-200: #9fb8c9;
-  --navy-100: #d3e0e8;
   --navy-50: #eef3f6;
 
-  /* UT Austin burnt-orange scale — primary is the official #BF5700 */
-  --orange-800: #8a3d00;
+  /* UT Austin burnt-orange scale, primary is the official #BF5700. Same rule. */
   --orange-700: #9e4700;
   --orange-600: #b04a0a;
   --orange-500: #bf5700;
   --orange-400: #d06a1f;
   --orange-300: #e08a4f;
-  --orange-200: #f0b98f;
-  --orange-100: #f8dcc4;
-  --orange-50: #fcf1e6;
 
   /* Type — four steps, named by the job they do. Fixed sizes, deliberately:
      an app that reads rows of numbers all day wants type that doesn't grow
@@ -95,13 +88,13 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --bg-color: #061729;
-    --surface-color: #0b2030;
-    --raised-color: #12304a;
-    --text-color: #eef3f6;
-    --text-muted: #9fb8c9;
-    --placeholder-color: #9fb8c9;
-    --border-color: #1b4260;
+    --bg-color: var(--navy-800);
+    --surface-color: var(--navy-700);
+    --raised-color: var(--navy-600);
+    --text-color: var(--navy-50);
+    --text-muted: var(--navy-200);
+    --placeholder-color: var(--navy-200);
+    --border-color: var(--navy-500);
     --primary-color: var(--orange-500);
     --primary-hover: var(--orange-400);
     /* Orange text on navy needs the lighter step: #bf5700 is only 3.94:1 here. */
@@ -360,8 +353,9 @@ body {
   gap: var(--space-4);
 }
 
+/* Where you can go is quiet; where you are is not. */
 .page-nav a {
-  color: var(--text-color);
+  color: var(--text-muted);
   font-size: var(--text-sm);
   font-weight: 500;
   text-decoration: none;
@@ -371,6 +365,11 @@ body {
 .page-nav a:hover {
   color: var(--primary-ink);
   text-decoration: underline;
+}
+
+.page-nav a[aria-current="page"] {
+  color: var(--text-color);
+  font-weight: 600;
 }
 
 .logout-link {

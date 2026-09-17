@@ -112,14 +112,7 @@ export default function PatientsPage() {
             "Loading…"
           )
         }
-        nav={
-          <>
-            <a href="/claims">Claims</a>
-            <a href="/work-queue">Work queue</a>
-            <a href="/dashboard">Dashboard</a>
-            <a href="/audit">Audit trail</a>
-          </>
-        }
+        current="/patients"
       >
         <a className="logout-link" href="/" onClick={logout}>
           Logout

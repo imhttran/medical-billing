@@ -178,14 +178,7 @@ export default function ClaimsPage() {
             "Loading…"
           )
         }
-        nav={
-          <>
-            <a href="/patients">Patients</a>
-            <a href="/work-queue">Work queue</a>
-            <a href="/dashboard">Dashboard</a>
-            <a href="/audit">Audit trail</a>
-          </>
-        }
+        current="/claims"
       >
         <a className="logout-link" href="/" onClick={logout}>
           Logout

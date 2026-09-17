@@ -45,6 +45,7 @@ export default function ResetPasswordPage() {
             type="password"
             id="password"
             name="password"
+            autoComplete="new-password"
             placeholder="Min 8 chars, 1 upper, 1 num, 1 special"
             required
           />
@@ -56,6 +57,7 @@ export default function ResetPasswordPage() {
             type="password"
             id="confirm-password"
             name="confirmPassword"
+            autoComplete="new-password"
             placeholder="Re-enter your password"
             required
           />
