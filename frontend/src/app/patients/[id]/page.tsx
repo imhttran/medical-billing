@@ -236,6 +236,9 @@ export default function PatientDetailPage() {
         <a className="logout-link" href="/patients">
           Patients
         </a>
+        <a className="logout-link" href="/work-queue">
+          Work queue
+        </a>
         <a className="logout-link" href="/" onClick={logout}>
           Logout
         </a>

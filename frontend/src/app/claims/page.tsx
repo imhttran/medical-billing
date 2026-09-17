@@ -201,6 +201,13 @@ export default function ClaimsPage() {
         </a>
         <a
           className="logout-link"
+          href="/work-queue"
+          style={{ marginRight: "1rem" }}
+        >
+          Work queue
+        </a>
+        <a
+          className="logout-link"
           href="/dashboard"
           style={{ marginRight: "1rem" }}
         >

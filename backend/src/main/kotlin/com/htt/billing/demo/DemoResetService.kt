@@ -28,8 +28,9 @@ import org.springframework.transaction.support.TransactionTemplate
  * survives for the same reason: audit events point at it.
  *
  * Claims go first. Everything a claim points at — its lines, its diagnoses, its
- * adjudications and its payments — cascades from the claim row, while patients and
- * coverages are referenced by claims and cannot be deleted before them.
+ * adjudications, its payments and its work items — cascades from the claim row,
+ * while patients and coverages are referenced by claims and cannot be deleted
+ * before them.
  */
 @Service
 class DemoResetService(

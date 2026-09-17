@@ -18,14 +18,27 @@ class AdjudicationService(
 ) {
 
     /**
-     * @return the payer's decision, priced line by line and recorded. The caller
-     *         reads the outcome and the patient responsibility off it to decide
-     *         where the claim goes next, and records the remittance that follows.
+     * The payer's answer: its decision, and the services it would not cover.
+     *
+     * The adjudication is the record of what it said about money. The refused
+     * services are not in that record — a line's status holds them — but they are
+     * what the follow-up is about, so they come back with the answer rather than
+     * being read again by whoever opens the work item.
+     */
+    data class Answer(
+        val adjudication: AdjudicationRepository.Adjudication,
+        val deniedProcedures: List<String>,
+    )
+
+    /**
+     * @return the payer's answer, priced line by line and recorded. The caller
+     *         decides where the claim goes next, records the remittance that
+     *         follows it, and opens whatever follow-up it leaves behind.
      */
     fun adjudicate(
         claim: ClaimRepository.Claim,
         lines: List<ClaimRepository.Line>,
-    ): AdjudicationRepository.Adjudication {
+    ): Answer {
         val rates = feeSchedule.ratesFor(claim.payerId)
         val result = PayerSimulator.price(
             lines.map { PayerSimulator.LineInput(it.lineNumber, it.procedureCode, it.chargeAmount) },
@@ -47,15 +60,18 @@ class AdjudicationService(
             )
         }
 
-        return adjudications.insert(
-            claimId = claim.id,
-            organizationId = claim.organizationId,
-            outcome = if (result.anyCovered) OUTCOME_ADJUDICATED else OUTCOME_DENIED,
-            totalCharge = result.totalCharge,
-            totalAllowed = result.totalAllowed,
-            totalAdjustment = result.totalAdjustment,
-            payerResponsibility = result.payerResponsibility,
-            patientResponsibility = result.patientResponsibility,
+        return Answer(
+            adjudication = adjudications.insert(
+                claimId = claim.id,
+                organizationId = claim.organizationId,
+                outcome = if (result.anyCovered) OUTCOME_ADJUDICATED else OUTCOME_DENIED,
+                totalCharge = result.totalCharge,
+                totalAllowed = result.totalAllowed,
+                totalAdjustment = result.totalAdjustment,
+                payerResponsibility = result.payerResponsibility,
+                patientResponsibility = result.patientResponsibility,
+            ),
+            deniedProcedures = result.deniedProcedures,
         )
     }
 

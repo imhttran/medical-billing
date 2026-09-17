@@ -19,7 +19,9 @@
   never confirms that it exists
 - **Terminology search** — ICD-10-CM and CPT/HCPCS lookups for the claim screen,
   seeded with a small sample set. Real code sets have their own licensing terms
-  and are not free to redistribute
+  and are not free to redistribute. One of the seeded services is deliberately not
+  priced by the synthetic payer, so a denial — and the denial queue — is reachable
+  from the screens
 - **Demo reset** — a deterministic synthetic practice (Jane Smith, her provider
   and her primary coverage), seeded on a development boot and rebuildable on
   demand. A reset clears the practice's claims and their payments before the
@@ -55,6 +57,12 @@
   claim page with Validate, Mark ready and Submit plus the payer's answer, the
   payer's reason when it refused the claim, a Resubmit, and the payments with
   their balance and a form to record one
+- **Work queue** — a rejection or a service the payer will not cover opens a work
+  item, and the queue lists what is still open across the caller's practices with
+  the claim, the patient and the payer's reason, so a row is actionable without
+  leaving the list. An item can be assigned (only to someone who can work that
+  queue) and resolved; resubmitting the claim resolves its items by itself.
+  Assignment and both kinds of resolution are audited
 - **Onboarding gates** — forced password change and required profile block
   API access until completed
 - **Admin user management** — create, delete, verify/unverify, change role,

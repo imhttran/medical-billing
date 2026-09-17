@@ -128,6 +128,13 @@ export default function PatientsPage() {
         </a>
         <a
           className="logout-link"
+          href="/work-queue"
+          style={{ marginRight: "1rem" }}
+        >
+          Work queue
+        </a>
+        <a
+          className="logout-link"
           href="/dashboard"
           style={{ marginRight: "1rem" }}
         >

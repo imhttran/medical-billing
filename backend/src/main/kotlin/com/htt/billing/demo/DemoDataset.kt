@@ -32,11 +32,11 @@ object DemoDataset {
      * What the local login is granted in the demo practice.
      *
      * Both roles, because one demo account has to be able to do everything the
-     * screens offer: an admin runs the practice and works its claims, but voiding
-     * one and recording payments belong to the billing roles, which a real
-     * deployment gives to someone else.
+     * screens offer: the practice admin manages users, and the billing manager
+     * works claims, assigns and resolves queue items, takes payments and voids. A
+     * real deployment gives the two to different people.
      */
-    val DEV_ADMIN_ROLES: List<String> = listOf("PRACTICE_ADMIN", "BILLER")
+    val DEV_ADMIN_ROLES: List<String> = listOf("PRACTICE_ADMIN", "BILLING_MANAGER")
 
     const val PATIENT_EXTERNAL_ID = "DEMO-JANE-SMITH"
     const val PATIENT_FIRST_NAME = "Jane"

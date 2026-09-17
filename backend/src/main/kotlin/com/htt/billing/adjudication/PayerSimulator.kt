@@ -33,6 +33,9 @@ object PayerSimulator {
     /** The member was not the payer's to cover on the date of service. */
     const val REJECTION_MEMBER_NOT_ELIGIBLE = "MEMBER_NOT_ELIGIBLE"
 
+    /** A service the payer's contract has no rate for. A denial, not a rejection. */
+    const val DENIAL_SERVICE_NOT_COVERED = "SERVICE_NOT_COVERED"
+
     /** Why the payer would not process the claim at all. */
     data class Rejection(val code: String, val message: String)
 
@@ -42,6 +45,7 @@ object PayerSimulator {
 
     data class LineResult(
         val lineNumber: Int,
+        val procedureCode: String,
         /** What was billed, rounded to cents like everything else here. */
         val chargeAmount: BigDecimal,
         val covered: Boolean,
@@ -65,6 +69,9 @@ object PayerSimulator {
 
         /** Any line paid makes the claim adjudicated; none paid makes it denied. */
         val anyCovered: Boolean get() = lines.any { it.covered }
+
+        /** The services the payer would not cover, which is what follow-up is about. */
+        val deniedProcedures: List<String> get() = lines.filter { !it.covered }.map { it.procedureCode }
     }
 
     fun price(lines: List<LineInput>, rates: Map<String, Rate>): Result =
@@ -116,13 +123,22 @@ object PayerSimulator {
         if (rate == null) {
             // Not covered: nothing is allowed and nothing is owed. The charge stays
             // on the line as what was billed.
-            return LineResult(line.lineNumber, charge, false, zero, zero, zero, zero)
+            return LineResult(line.lineNumber, line.procedureCode, charge, false, zero, zero, zero, zero)
         }
         val allowed = cents(minOf(rate.allowedAmount, charge))
         val adjustment = cents(charge - allowed)
         val patient = cents(minOf(rate.patientCopay, allowed))
         val payer = cents(allowed - patient)
-        return LineResult(line.lineNumber, charge, true, allowed, adjustment, payer, patient)
+        return LineResult(
+            line.lineNumber,
+            line.procedureCode,
+            charge,
+            true,
+            allowed,
+            adjustment,
+            payer,
+            patient,
+        )
     }
 
     private fun minOf(first: BigDecimal, second: BigDecimal): BigDecimal =

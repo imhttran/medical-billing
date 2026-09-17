@@ -15,6 +15,7 @@ import com.htt.billing.common.error.ValidationIssuesException
 import com.htt.billing.payment.PaymentService
 import com.htt.billing.security.AuthorizationService
 import com.htt.billing.security.Permissions
+import com.htt.billing.workflow.WorkQueueService
 import java.math.BigDecimal
 import java.time.Instant
 import org.springframework.dao.DataIntegrityViolationException
@@ -37,6 +38,7 @@ class ClaimService(
     private val authorization: AuthorizationService,
     private val adjudication: AdjudicationService,
     private val payments: PaymentService,
+    private val queue: WorkQueueService,
     private val transactions: TransactionTemplate,
 ) {
 
@@ -191,12 +193,17 @@ class ClaimService(
             ClaimStatus.requireMove(from, outgoing)
             claims.updateStatus(claimId, outgoing, Instant.now())
                 ?: throw NotFoundException("Claim not found")
+            if (resubmission) {
+                // Going back to the payer is the follow-up the queue was waiting on.
+                queue.resolveForClaim(claimId, userId)
+            }
 
             val rejection = eligibilityRejection(claim)
             result = if (rejection == null) {
-                takeThePayersAnswer(claimId, outgoing)
+                takeThePayersAnswer(claimId, outgoing, claimant = claim)
             } else {
                 ClaimStatus.requireMove(outgoing, ClaimStatus.REJECTED)
+                queue.openForRejection(claim, rejection)
                 claims.updateStatus(
                     id = claimId,
                     status = ClaimStatus.REJECTED,
@@ -217,24 +224,36 @@ class ClaimService(
      * share as it answered, so the only money still owed is the patient's: a claim
      * with a patient responsibility is ADJUDICATED and awaiting it, and one without
      * is PAID because nothing is outstanding at all.
+     *
+     * A service the payer would not cover is follow-up work, so it goes on the
+     * queue either way — a claim can be adjudicated and still need someone to look
+     * at a refused line.
      */
-    private fun takeThePayersAnswer(claimId: Int, outgoing: ClaimStatus): Claim {
+    private fun takeThePayersAnswer(
+        claimId: Int,
+        outgoing: ClaimStatus,
+        claimant: Claim,
+    ): Claim {
         ClaimStatus.requireMove(outgoing, ClaimStatus.ACCEPTED)
         val accepted = claims.updateStatus(claimId, ClaimStatus.ACCEPTED, submittedAt = null)
             ?: throw NotFoundException("Claim not found")
 
         val answer = adjudication.adjudicate(accepted, claims.findLines(claimId))
+        val decision = answer.adjudication
         payments.recordInsurancePayment(
             claimId = claimId,
             organizationId = accepted.organizationId,
             claimNumber = accepted.claimNumber,
             submissionVersion = accepted.submissionVersion,
-            amount = answer.payerResponsibility,
+            amount = decision.payerResponsibility,
         )
+        if (answer.deniedProcedures.isNotEmpty()) {
+            queue.openForDenial(claimant, answer.deniedProcedures)
+        }
 
         val outcome = when {
-            answer.outcome == AdjudicationService.OUTCOME_DENIED -> ClaimStatus.DENIED
-            answer.patientResponsibility.signum() > 0 -> ClaimStatus.ADJUDICATED
+            decision.outcome == AdjudicationService.OUTCOME_DENIED -> ClaimStatus.DENIED
+            decision.patientResponsibility.signum() > 0 -> ClaimStatus.ADJUDICATED
             else -> ClaimStatus.PAID
         }
         ClaimStatus.requireMove(ClaimStatus.ACCEPTED, outcome)

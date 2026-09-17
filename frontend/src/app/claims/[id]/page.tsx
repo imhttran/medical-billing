@@ -316,6 +316,9 @@ export default function ClaimDetailPage() {
         <a className="logout-link" href="/claims">
           Claims
         </a>
+        <a className="logout-link" href="/work-queue">
+          Work queue
+        </a>
         <a className="logout-link" href="/" onClick={logout}>
           Logout
         </a>
