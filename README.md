@@ -15,6 +15,16 @@ Spring API     backend/         → :8080   Kotlin + Spring MVC + JdbcClient + J
 PostgreSQL     migrations apply on boot (Flyway)
 ```
 
+## Demo
+
+A narrated walkthrough covering every screen, every billing role, and the FHIR
+boundary. Seven minutes, recorded against this build on synthetic data.
+
+https://github.com/user-attachments/assets/0e0d71c4-8103-4ab5-a439-1e1cb5925159
+
+The 720p cut is 9MB, attached to
+[issue #1](https://github.com/imhttran/medical-billing/issues/1).
+
 ## Quick Start
 
 **Docker (primary path)** — no local JDK, Node, or Postgres needed:
