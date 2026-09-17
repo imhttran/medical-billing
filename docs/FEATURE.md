@@ -89,7 +89,8 @@
 - **Onboarding gates** — forced password change and required profile block
   API access until completed
 - **Admin user management** — create, delete, verify/unverify, change role,
-  and trigger password resets from the dashboard
+  trigger password resets, and see each account's billing roles, all from the
+  dashboard
 - **Email queue** — Postgres-backed queue with a bounded-retry worker; logs to
   stdout when no SMTP is configured, so dev needs no mail server
 - **Enumeration-safe endpoints** — generic responses on signup/forgot-password
@@ -101,6 +102,15 @@
   titles
 
 ## Permission matrix
+
+Two different things on a user row are called a role, and only one of them
+grants anything. `users.role` is a legacy ranked column, `client` below
+`staff` below `admin`, and it gates exactly one screen, the user list at
+`/api/users`. Everything else in the matrix below hangs off
+`user_role_assignments`, so an account can be a `client` and still hold
+`BILLING_MANAGER`, or carry `admin` and hold no practice content at all. The
+users screen shows both, the ranked one as the editable picker and the billing
+ones beneath it.
 
 The V1 matrix, reviewed and settled in Milestone 8. `PermissionMatrixTest` holds
 it to the rules the review set: platform administration carries no practice

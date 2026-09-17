@@ -35,6 +35,7 @@ type UserRow = {
   email: string;
   role: string;
   emailVerified: boolean;
+  roleCodes?: string[];
 };
 
 type SortKey = "email" | "role" | "emailVerified";
@@ -452,6 +453,16 @@ export default function DashboardPage() {
                             ) : (
                               user.role
                             )}
+                            {/* The dropdown above is the legacy ranked column,
+                                which only decides who reaches this screen. What
+                                a user may actually do is these codes, so they
+                                belong beside it rather than in a column of
+                                their own that would widen the table. */}
+                            {user.roleCodes?.length ? (
+                              <p className="role-codes">
+                                {user.roleCodes.join(", ")}
+                              </p>
+                            ) : null}
                           </td>
                           <td>{yesNo(user.emailVerified)}</td>
                           <td>

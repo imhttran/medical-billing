@@ -55,6 +55,11 @@ class UserRepository(private val jdbc: JdbcClient) {
         val role: String,
         val emailVerified: Boolean,
         val createdAt: Instant,
+        /**
+         * The RBAC codes this user holds, sorted. Empty when nobody has granted
+         * them one. Distinct from [role], which is the legacy ranked column.
+         */
+        val roleCodes: List<String>,
     )
 
     fun findAccountByEmail(email: String): Account? = jdbc
@@ -299,6 +304,11 @@ class UserRepository(private val jdbc: JdbcClient) {
     /**
      * Staff see clients and other staff — admin accounts aren't theirs to
      * manage. Admin sees everyone.
+     *
+     * The billing roles come along as one aggregated column rather than a query
+     * per row, since the screen shows a page of them at once. Both the role and
+     * the assignment have to be active to count, the same rule the permission
+     * lookup applies, so the list can't claim a role that grants nothing.
      */
     fun list(includeAdminAccounts: Boolean): List<ListItem> {
         val filter = if (includeAdminAccounts) "" else " WHERE role IN ('client', 'staff')"
@@ -309,7 +319,14 @@ class UserRepository(private val jdbc: JdbcClient) {
                 """
                 SELECT id, email, role,
                        email_verified AS "emailVerified",
-                       created_at     AS "createdAt"
+                       created_at     AS "createdAt",
+                       COALESCE(
+                           (SELECT string_agg(r.code, ',' ORDER BY r.code)
+                            FROM user_role_assignments a
+                            JOIN roles r ON r.id = a.role_id AND r.active
+                            WHERE a.user_id = users.id AND a.active),
+                           ''
+                       ) AS "roleCodes"
                 FROM users$filter
                 ORDER BY created_at ASC
                 """,
@@ -322,6 +339,7 @@ class UserRepository(private val jdbc: JdbcClient) {
                         rs.getString("role"),
                         rs.getBoolean("emailVerified"),
                         rs.getObject("createdAt", OffsetDateTime::class.java).toInstant(),
+                        rs.getString("roleCodes").split(',').filter { it.isNotEmpty() },
                     )
                 },
             )

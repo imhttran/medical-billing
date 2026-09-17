@@ -614,6 +614,14 @@ body {
   cursor: pointer;
 }
 
+/* The billing roles under that picker. Small and muted, because they are a fact
+   about the account rather than a control. */
+.user-table .role-codes {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
 .user-table td:last-child {
   display: flex;
   align-items: flex-start;
