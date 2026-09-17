@@ -45,12 +45,14 @@ class DemoResetEndpointTest : BillingApiTest() {
 
         val response = env.doJson("POST", "/api/system/reset", platformAdmin.token, null)
         assertStatus(200, response)
-        assertEquals(1, response.body.path("dataset").path("patients").asInt())
+        assertEquals(DemoDataset.PATIENTS.size, response.body.path("dataset").path("patients").asInt())
         assertEquals(DemoDataset.PROVIDERS.size, response.body.path("dataset").path("providers").asInt())
+        assertEquals(DemoDataset.CLAIMS.size, response.body.path("dataset").path("claims").asInt())
 
         val organizationId = demoOrganizationId(jdbc)
         assertNotNull(organizationId)
-        assertEquals(1, countPatients(jdbc, organizationId!!))
+        assertEquals(DemoDataset.PATIENTS.size, countPatients(jdbc, organizationId!!))
+        assertEquals(DemoDataset.CLAIMS.size, countClaims(jdbc, organizationId))
         assertEquals(1, auditCountFor(jdbc, DemoResetService.ACTION_DEMO_RESET, platformAdmin.userId))
     }
 
@@ -123,11 +125,14 @@ class DemoResetEndpointTest : BillingApiTest() {
 
         val organizationId = demoOrganizationId(jdbc)
         assertNotNull(organizationId) { "the seeder created no demo practice" }
-        assertEquals(1, countPatients(jdbc, organizationId!!))
+        assertEquals(DemoDataset.PATIENTS.size, countPatients(jdbc, organizationId!!))
         assertEquals(DemoDataset.PROVIDERS.size, countProviders(jdbc, organizationId))
 
         val patientId = demoPatientId(jdbc, organizationId)
         assertNotNull(patientId)
-        assertEquals(DemoDataset.COVERAGE_MEMBER_ID, demoCoverageMemberId(jdbc, patientId!!))
+        assertEquals(
+            DemoDataset.JANE.coverages.first().memberId,
+            demoCoverageMemberId(jdbc, patientId!!),
+        )
     }
 }

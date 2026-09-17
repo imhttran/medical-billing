@@ -36,6 +36,7 @@ class SystemResetController(private val demo: DemoResetService) {
                     "providers" to dataset.providers,
                     "patients" to dataset.patients,
                     "coverages" to dataset.coverages,
+                    "claims" to dataset.claims,
                 ),
             ),
         )

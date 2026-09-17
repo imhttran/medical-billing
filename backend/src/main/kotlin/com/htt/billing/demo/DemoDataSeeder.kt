@@ -32,11 +32,12 @@ class DemoDataSeeder(private val demo: DemoResetService) : ApplicationRunner {
             return
         }
         log.info(
-            "[demo] seeded practice {} with {} patient(s), {} provider(s), {} coverage(s)",
+            "[demo] seeded practice {} with {} patient(s), {} provider(s), {} coverage(s), {} claim(s)",
             seeded.organizationId,
             seeded.patients,
             seeded.providers,
             seeded.coverages,
+            seeded.claims,
         )
     }
 

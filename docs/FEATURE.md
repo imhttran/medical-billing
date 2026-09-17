@@ -31,14 +31,18 @@
   and are not free to redistribute. One of the seeded services is deliberately not
   priced by the synthetic payer, so a denial — and the denial queue — is reachable
   from the screens
-- **Demo reset** — a deterministic synthetic practice (Jane Smith, her provider
-  and her primary coverage), seeded on a development boot and rebuildable on
-  demand. A reset clears the practice's claims and their payments before the
-  patients and coverage they point at, so it works on a database someone has been
-  using. The reset endpoint exists only where `app.env` is development or demo,
-  and still requires the platform-scoped `SYSTEM_RESET` permission. The seeded
-  practice is granted to the local dev login, so the billing screens have
-  something to show
+- **Demo reset** — a deterministic synthetic practice (Jane Smith and nine other
+  patients, three clinicians and their coverages), seeded on a development boot
+  and rebuildable on demand. The seeded claims cover the states the screens show,
+  including a part paid one, a claim the payer covered in full, a denied service
+  and a claim refused for a member who was not eligible, which is what leaves
+  work on the queue, and every submission is in the audit trail with the payer's
+  answer beside it, since a claim's history is that trail. A reset clears the practice's claims and their payments
+  before the patients and coverage they point at, so it works on a database
+  someone has been using. The reset endpoint exists only where `app.env` is
+  development or demo, and still requires the platform-scoped `SYSTEM_RESET`
+  permission. The seeded practice is granted to the local dev login, so the
+  billing screens have something to show
 - **Patient screens** — patient list with name search and add, and a detail page
   that edits the patient, manages their coverage, and shows what the patient owes
   across their claims. No practice picker: the server derives it from the caller's

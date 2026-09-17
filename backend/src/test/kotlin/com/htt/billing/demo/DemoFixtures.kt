@@ -1,5 +1,6 @@
 package com.htt.billing.demo
 
+import java.sql.Types
 import org.springframework.jdbc.core.simple.JdbcClient
 
 /**
@@ -27,8 +28,106 @@ internal fun countCoverages(jdbc: JdbcClient, organizationId: Int): Int =
 internal fun countClaims(jdbc: JdbcClient, organizationId: Int): Int =
     countOf(jdbc, "claims", organizationId)
 
-internal fun countPayments(jdbc: JdbcClient, organizationId: Int): Int =
-    countOf(jdbc, "patient_payments", organizationId) + countOf(jdbc, "insurance_payments", organizationId)
+internal fun claimsByStatus(jdbc: JdbcClient, organizationId: Int): Map<String, Int> = jdbc
+    .sql("SELECT status, count(*) AS total FROM claims WHERE organization_id = :organizationId GROUP BY status")
+    .param("organizationId", organizationId)
+    .query { row, _ -> row.getString("status") to row.getInt("total") }
+    .list()
+    .toMap()
+
+internal fun claimIdWithStatus(jdbc: JdbcClient, organizationId: Int, status: String): Int? = jdbc
+    .sql("SELECT id FROM claims WHERE organization_id = :organizationId AND status = :status ORDER BY id LIMIT 1")
+    .param("organizationId", organizationId)
+    .param("status", status)
+    .query(Int::class.javaObjectType)
+    .optional()
+    .orElse(null)
+
+internal fun openWorkItems(jdbc: JdbcClient, organizationId: Int): Int = jdbc
+    .sql("SELECT count(*) FROM work_items WHERE organization_id = :organizationId AND status = 'OPEN'")
+    .param("organizationId", organizationId)
+    .query(Int::class.javaObjectType)
+    .single()
+
+/**
+ * Audit events for one action, optionally for one entity. Only events with no
+ * actor are counted, which is what the seed writes: it has no signed-in user, and
+ * the tests pin that rather than a made-up actor.
+ */
+internal fun seededAuditEventCount(
+    jdbc: JdbcClient,
+    organizationId: Int,
+    action: String,
+    entityId: String? = null,
+): Int = jdbc
+    .sql(
+        """
+        SELECT count(*) FROM audit_events
+        WHERE organization_id = :organizationId AND action = :action AND user_id IS NULL
+          AND (:entityId IS NULL OR entity_id = :entityId)
+        """,
+    )
+    .param("organizationId", organizationId)
+    .param("action", action)
+    .param("entityId", entityId, Types.VARCHAR)
+    .query(Int::class.javaObjectType)
+    .single()
+
+/** Everything recorded against one claim, payer and patient together. */
+internal fun paymentsForClaim(jdbc: JdbcClient, claimId: Int): Int = jdbc
+    .sql(
+        """
+        SELECT (SELECT count(*) FROM patient_payments WHERE claim_id = :claimId)
+             + (SELECT count(*) FROM insurance_payments WHERE claim_id = :claimId)
+        """,
+    )
+    .param("claimId", claimId)
+    .query(Int::class.javaObjectType)
+    .single()
+
+/** The walkthrough claim's money, which is what the plan's milestone states. */
+internal data class WalkthroughClaim(
+    val claimId: Int,
+    val status: String,
+    val totalCharge: String,
+    val totalAllowed: String,
+    val totalAdjustment: String,
+    val payerResponsibility: String,
+    val patientResponsibility: String,
+)
+
+internal fun walkthroughAdjudication(
+    jdbc: JdbcClient,
+    organizationId: Int,
+    patientId: Int,
+    serviceDate: String,
+): WalkthroughClaim? = jdbc
+    .sql(
+        """
+        SELECT c.id, c.status, a.total_charge, a.total_allowed, a.total_adjustment,
+               a.payer_responsibility, a.patient_responsibility
+        FROM claims c
+        JOIN adjudications a ON a.claim_id = c.id
+        WHERE c.organization_id = :organizationId AND c.patient_id = :patientId
+          AND c.service_date = CAST(:serviceDate AS DATE)
+        """,
+    )
+    .param("organizationId", organizationId)
+    .param("patientId", patientId)
+    .param("serviceDate", serviceDate)
+    .query { row, _ ->
+        WalkthroughClaim(
+            claimId = row.getInt("id"),
+            status = row.getString("status"),
+            totalCharge = row.getBigDecimal("total_charge").toPlainString(),
+            totalAllowed = row.getBigDecimal("total_allowed").toPlainString(),
+            totalAdjustment = row.getBigDecimal("total_adjustment").toPlainString(),
+            payerResponsibility = row.getBigDecimal("payer_responsibility").toPlainString(),
+            patientResponsibility = row.getBigDecimal("patient_responsibility").toPlainString(),
+        )
+    }
+    .optional()
+    .orElse(null)
 
 /** The id of the seeded patient, so a test can prove it survived a reset. */
 internal fun demoPatientId(jdbc: JdbcClient, organizationId: Int): Int? = jdbc
@@ -39,7 +138,7 @@ internal fun demoPatientId(jdbc: JdbcClient, organizationId: Int): Int? = jdbc
         """,
     )
     .param("organizationId", organizationId)
-    .param("externalId", DemoDataset.PATIENT_EXTERNAL_ID)
+    .param("externalId", DemoDataset.JANE.externalId)
     .query(Int::class.javaObjectType)
     .optional()
     .orElse(null)

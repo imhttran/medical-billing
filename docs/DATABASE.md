@@ -129,6 +129,13 @@ Dev seed (`DevAdminSeeder`, only when `NODE_ENV=development`): upserts the dev
 admin (README has the credentials) plus their profile, so it isn't blocked by
 onboarding gates.
 
+Demo data (`DemoDataSeeder`) runs right after it and lays down
+`DemoDataset`'s practice — ten patients with their coverages, three clinicians
+and fourteen claims, each taken as far as the state machine allows without an
+operator. It only seeds a practice that holds no patients, so a restart never
+destroys work in progress. `DemoResetService` is the same writer behind the
+reset endpoint.
+
 ## Day-to-day operations
 
 | Task               | Command                                                                                      |

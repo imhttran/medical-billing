@@ -1,7 +1,12 @@
 package com.htt.billing.demo
 
 import com.htt.billing.common.error.ForbiddenException
+import com.htt.billing.claim.ClaimFacts
+import com.htt.billing.claim.ClaimStatus
+import com.htt.billing.claim.ClaimValidator
+import com.htt.billing.repository.claim.ClaimRepository
 import com.htt.billing.security.RoleCodes
+import com.htt.billing.service.claim.ClaimService
 import com.htt.billing.service.demo.DemoResetService
 import com.htt.billing.support.BillingApiTest
 import com.htt.billing.support.assertStatus
@@ -27,6 +32,12 @@ class DemoResetTest : BillingApiTest() {
     @Autowired
     private lateinit var demo: DemoResetService
 
+    @Autowired
+    private lateinit var claimRepository: ClaimRepository
+
+    @Autowired
+    private lateinit var claimFacts: ClaimFacts
+
     @AfterEach
     fun removeDemoPractice() {
         clearDemoData(jdbc)
@@ -50,25 +61,157 @@ class DemoResetTest : BillingApiTest() {
         val organizationId = demoOrganizationId(jdbc)
         assertNotNull(organizationId)
         assertEquals(DemoDataset.PROVIDERS.size, first.providers)
-        assertEquals(1, countPatients(jdbc, organizationId!!))
-        assertEquals(1, countCoverages(jdbc, organizationId))
+        assertEquals(DemoDataset.PATIENTS.size, countPatients(jdbc, organizationId!!))
+        assertEquals(DemoDataset.COVERAGE_COUNT, countCoverages(jdbc, organizationId))
+        assertEquals(DemoDataset.CLAIMS.size, countClaims(jdbc, organizationId))
 
         // Something the reset did not put there, which it must therefore remove.
         insertStrayPatient(jdbc, organizationId, "Stray")
-        assertEquals(2, countPatients(jdbc, organizationId))
+        assertEquals(DemoDataset.PATIENTS.size + 1, countPatients(jdbc, organizationId))
 
         val second = demo.reset(platformAdminId)
         assertEquals(first.organizationId, second.organizationId)
-        assertEquals(1, countPatients(jdbc, organizationId))
+        assertEquals(DemoDataset.PATIENTS.size, countPatients(jdbc, organizationId))
         assertEquals(DemoDataset.PROVIDERS.size, countProviders(jdbc, organizationId))
+        assertEquals(DemoDataset.CLAIMS.size, countClaims(jdbc, organizationId))
 
         // The fixed values, not just "a patient exists".
         val patientId = demoPatientId(jdbc, organizationId)
         assertNotNull(patientId)
         assertEquals(
-            DemoDataset.COVERAGE_MEMBER_ID,
+            DemoDataset.JANE.coverages.first().memberId,
             demoCoverageMemberId(jdbc, patientId!!),
         )
+    }
+
+    @Test
+    fun theWalkthroughClaimLandsOnThePlansNumbers() {
+        val platformAdminId = insertUser("platform-admin")
+        assign(platformAdminId, RoleCodes.PLATFORM_ADMIN, null)
+        demo.reset(platformAdminId)
+
+        val organizationId = demoOrganizationId(jdbc)!!
+        val walkthrough = DemoDataset.CLAIMS.first()
+        val patientId = demoPatientId(jdbc, organizationId)!!
+        val claim = walkthroughAdjudication(
+            jdbc,
+            organizationId,
+            patientId,
+            walkthrough.serviceDate.toString(),
+        )
+
+        // The milestone's numbers, asserted against the seeded row rather than
+        // against the simulator. A seeded claim that stopped matching them would
+        // be a demo that contradicts the plan.
+        assertNotNull(claim) { "the walkthrough claim was not seeded" }
+        assertEquals("ADJUDICATED", claim!!.status)
+        assertEquals("150.00", claim.totalCharge)
+        assertEquals("110.00", claim.totalAllowed)
+        assertEquals("40.00", claim.totalAdjustment)
+        assertEquals("80.00", claim.payerResponsibility)
+        assertEquals("30.00", claim.patientResponsibility)
+    }
+
+    @Test
+    fun theSeededClaimsCoverTheStatesTheScreensShow() {
+        val platformAdminId = insertUser("platform-admin")
+        assign(platformAdminId, RoleCodes.PLATFORM_ADMIN, null)
+        demo.reset(platformAdminId)
+
+        val organizationId = demoOrganizationId(jdbc)!!
+        val byStatus = claimsByStatus(jdbc, organizationId)
+
+        // The drafts the operator finishes, and a ready one to send.
+        assertEquals(
+            DemoDataset.CLAIMS.count { it.path == DemoDataset.Path.DRAFT },
+            byStatus["DRAFT"] ?: 0,
+        )
+        assertEquals(
+            DemoDataset.CLAIMS.count { it.path == DemoDataset.Path.READY },
+            byStatus["READY"] ?: 0,
+        )
+        // The three endings the payer can give, which is what the screens are
+        // read for: nothing owed, part owed, and the two refusals.
+        assertTrue((byStatus["PAID"] ?: 0) >= 1) { "no fully paid claim" }
+        assertTrue((byStatus["DENIED"] ?: 0) >= 1) { "no denied claim" }
+        assertEquals(1, byStatus["REJECTED"] ?: 0) { "no rejected claim" }
+
+        // The part paid one owes its state to two payments rather than to a status
+        // anyone typed, so both have to be there.
+        val partPaid = claimIdWithStatus(jdbc, organizationId, "PARTIALLY_PAID")
+        assertNotNull(partPaid) { "no part paid claim" }
+        assertEquals(2, paymentsForClaim(jdbc, partPaid!!)) {
+            "a part paid claim needs the payer's share and the patient's"
+        }
+
+        // A refusal and two uncovered services are the work the queue is for.
+        assertEquals(3, openWorkItems(jdbc, organizationId))
+    }
+
+    @Test
+    fun everySeededSubmissionIsInTheAuditTrail() {
+        val platformAdminId = insertUser("platform-admin")
+        assign(platformAdminId, RoleCodes.PLATFORM_ADMIN, null)
+        demo.reset(platformAdminId)
+
+        val organizationId = demoOrganizationId(jdbc)!!
+        // Claim history is the audit trail, so a demo with fourteen claims and an
+        // empty trail would be a demo of the wrong thing. Every claim the seed sent
+        // to the payer is in it, and Jane's is among them carrying the payer's
+        // answer.
+        assertEquals(
+            DemoDataset.CLAIMS.count { it.path == DemoDataset.Path.SUBMITTED },
+            seededAuditEventCount(jdbc, organizationId, ClaimService.ACTION_CLAIM_SUBMITTED),
+        )
+
+        val walkthrough = DemoDataset.CLAIMS.first()
+        val walkthroughClaimId = walkthroughAdjudication(
+            jdbc,
+            organizationId,
+            demoPatientId(jdbc, organizationId)!!,
+            walkthrough.serviceDate.toString(),
+        )!!.claimId
+        assertEquals(
+            1,
+            seededAuditEventCount(
+                jdbc,
+                organizationId,
+                ClaimService.ACTION_CLAIM_SUBMITTED,
+                walkthroughClaimId.toString(),
+            ),
+        )
+    }
+
+    @Test
+    fun everySeededClaimWouldHaveSurvivedTheAppsOwnValidation() {
+        val platformAdminId = insertUser("platform-admin")
+        assign(platformAdminId, RoleCodes.PLATFORM_ADMIN, null)
+        demo.reset(platformAdminId)
+
+        val organizationId = demoOrganizationId(jdbc)!!
+        val seeded = claimRepository.findIn(listOf(organizationId), null).map { it.claim }
+        assertEquals(DemoDataset.CLAIMS.size, seeded.size)
+
+        // Anything past DRAFT is a claim the app would have validated before moving
+        // it, so the seed's claims have to satisfy the same rules. The drafts are
+        // left out on purpose: one of them is incomplete so the validation screen
+        // has something to report.
+        val moved = seeded.filter { it.status != ClaimStatus.DRAFT }
+        moved.forEach { claim ->
+            val issues = ClaimValidator.validate(
+                claimFacts.forClaim(
+                    claim,
+                    claimRepository.findDiagnoses(claim.id).map { it.diagnosisCode },
+                    claimRepository.findLines(claim.id).map {
+                        ClaimRepository.LineInput(it.lineNumber, it.procedureCode, it.quantity, it.chargeAmount)
+                    },
+                ),
+            )
+            assertTrue(issues.isEmpty()) {
+                "${claim.claimNumber} is not a claim the app would have accepted: " +
+                    issues.joinToString(", ") { it.code }
+            }
+        }
     }
 
     @Test
@@ -78,21 +221,21 @@ class DemoResetTest : BillingApiTest() {
         demo.reset(platformAdminId)
         val organizationId = demoOrganizationId(jdbc)!!
         val patientId = demoPatientId(jdbc, organizationId)!!
+        val seeded = countClaims(jdbc, organizationId)
 
         // A claim and a payment on it: the rows a developing session leaves behind.
         // The claim references the seeded patient and coverage, so a reset that does
         // not clear claims first cannot delete either of them.
         val claimId = insertStrayClaim(jdbc, organizationId, patientId)
         assertNotNull(insertStrayPatientPayment(jdbc, organizationId, patientId, claimId))
-        assertEquals(1, countClaims(jdbc, organizationId))
-        assertEquals(1, countPayments(jdbc, organizationId))
+        assertEquals(seeded + 1, countClaims(jdbc, organizationId))
 
         demo.reset(platformAdminId)
 
-        assertEquals(0, countClaims(jdbc, organizationId)) { "a claim survived the reset" }
-        assertEquals(0, countPayments(jdbc, organizationId)) { "a payment survived the reset" }
-        assertEquals(1, countPatients(jdbc, organizationId))
-        assertEquals(1, countCoverages(jdbc, organizationId))
+        assertEquals(seeded, countClaims(jdbc, organizationId)) { "the dataset did not come back" }
+        assertEquals(0, paymentsForClaim(jdbc, claimId)) { "a payment survived the reset" }
+        assertEquals(DemoDataset.PATIENTS.size, countPatients(jdbc, organizationId))
+        assertEquals(DemoDataset.COVERAGE_COUNT, countCoverages(jdbc, organizationId))
     }
 
     @Test
@@ -120,7 +263,9 @@ class DemoResetTest : BillingApiTest() {
         val organizationId = demoOrganizationId(jdbc)!!
         val stray = insertStrayPatient(jdbc, organizationId, "Keep")
         assertNull(demo.seedIfAbsent())
-        assertTrue(countPatients(jdbc, organizationId) == 2) { "a boot wiped existing work" }
+        assertTrue(countPatients(jdbc, organizationId) == DemoDataset.PATIENTS.size + 1) {
+            "a boot wiped existing work"
+        }
         assertNotNull(stray)
     }
 

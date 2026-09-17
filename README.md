@@ -63,6 +63,11 @@ browser asks for a 2FA code; in development it's always `1234`, and the browser
 is trusted afterwards. Without SMTP configured the mailer logs emails instead of
 sending them; under compose, Mailpit collects them at http://localhost:8025.
 
+A development boot seeds the demo practice — ten patients with their coverages,
+three clinicians and fourteen claims across every state the screens show, with
+three items waiting on the work queue and every submission in the audit trail.
+`make db-reseed YES=1` rebuilds it after someone has changed it.
+
 ## Docs
 
 - **[docs/FEATURE.md](docs/FEATURE.md)** — what this build does
