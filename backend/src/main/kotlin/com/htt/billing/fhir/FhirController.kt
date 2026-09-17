@@ -15,8 +15,8 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * The FHIR boundary. This is not the UI's API: the browser talks to `/api/claims`
- * and friends, and an external system exchanges resources here.
+ * FHIR is import/export rather than the normal UI API: the browser talks to
+ * `/api/claims` and friends, and an external system exchanges resources here.
  *
  * Exports answer with `application/fhir+json` — the media type a FHIR client
  * expects — and the import takes a Bundle in that same form.
@@ -29,7 +29,7 @@ class FhirController(
 ) {
 
     /**
-     * A Bundle of Patients, Practitioners and Coverages.
+     * A Bundle of Patients, Practitioners, Coverages and Claims.
      *
      * The practice is named rather than assumed — an import has no single row to
      * derive it from — and the name is checked against the caller's grants, so the
@@ -65,6 +65,10 @@ class FhirController(
     @GetMapping("/eob/{id}", produces = [FHIR_JSON])
     fun exportExplanationOfBenefit(user: AuthUser, @PathVariable("id") id: String): ResponseEntity<String> =
         fhirResponse(exports.explanationOfBenefit(user.id, Api.parseId(id, "claim id")))
+
+    @GetMapping("/claim-response/{id}", produces = [FHIR_JSON])
+    fun exportClaimResponse(user: AuthUser, @PathVariable("id") id: String): ResponseEntity<String> =
+        fhirResponse(exports.claimResponse(user.id, Api.parseId(id, "claim id")))
 
     /** The resource itself, not wrapped: a FHIR client parses the body as one. */
     private fun fhirResponse(body: String): ResponseEntity<String> =

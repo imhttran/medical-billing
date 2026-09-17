@@ -12,7 +12,9 @@ import com.htt.billing.practice.ProviderRepository
 import com.htt.billing.security.AuthorizationService
 import com.htt.billing.security.Permissions
 import java.math.BigDecimal
+import java.time.LocalDate
 import org.hl7.fhir.r4.model.Claim
+import org.hl7.fhir.r4.model.ClaimResponse
 import org.hl7.fhir.r4.model.CodeableConcept
 import org.hl7.fhir.r4.model.Coding
 import org.hl7.fhir.r4.model.DomainResource
@@ -24,11 +26,15 @@ import org.hl7.fhir.r4.model.Reference
 import org.springframework.stereotype.Service
 
 /**
- * FHIR export: a claim as the payer would receive it, and what the payer made of it.
+ * FHIR export: a claim as the payer would receive it, and what the payer made of
+ * it — as an ExplanationOfBenefit for the practice to read, and as the
+ * ClaimResponse a payer sends back.
  *
- * The two resources are the same facts read two ways. The Claim is what the practice
- * billed; the ExplanationOfBenefit is what the payer answered, and it only exists
- * once the payer has answered — a rejected claim has nothing to explain.
+ * The three resources are the same facts read different ways. The Claim is what the
+ * practice billed; the other two are what the payer answered, and they only exist
+ * once the payer has answered — a rejected claim has nothing to explain. The
+ * ClaimResponse carries the same figures as the ExplanationOfBenefit from one list
+ * of adjudications, so the two cannot say different things.
  *
  * The payer is exported as a contained Organization rather than a reference to
  * something on a server we do not have, so the resource stands on its own.
@@ -66,10 +72,24 @@ class FhirExportService(
     /** @return the payer's answer as FHIR R4 JSON, which needs one to exist. */
     fun explanationOfBenefit(userId: Int, claimId: Int): String {
         val facts = factsFor(userId, claimId)
-        val adjudication = facts.adjudication
-            ?: throw NotFoundException("This claim has not been adjudicated, so there is nothing to explain")
+        val adjudication = adjudicationFor(facts)
         return fhir.parser().encodeResourceToString(eobResource(facts, adjudication))
     }
+
+    /**
+     * @return the payer's answer as the ClaimResponse a payer sends back, which is
+     *         the same answer the ExplanationOfBenefit carries. Both exist because
+     *         a payer's reply is read as one by a clearinghouse and as the other by
+     *         the practice, and neither is a translation of the first.
+     */
+    fun claimResponse(userId: Int, claimId: Int): String {
+        val facts = factsFor(userId, claimId)
+        val adjudication = adjudicationFor(facts)
+        return fhir.parser().encodeResourceToString(claimResponseResource(facts, adjudication))
+    }
+
+    private fun adjudicationFor(facts: Facts): AdjudicationRepository.Adjudication = facts.adjudication
+        ?: throw NotFoundException("This claim has not been adjudicated, so there is nothing to explain")
 
     /**
      * Visibility first, then the export permission: a claim outside the caller's
@@ -176,58 +196,133 @@ class FhirExportService(
             coverage = Reference("Coverage/${facts.coverage.id}")
         }
 
-        eob.addTotal(totalOf(FhirMapping.Adjudication.SUBMITTED, adjudication.totalCharge))
-        eob.addTotal(totalOf(FhirMapping.Adjudication.ALLOWED, adjudication.totalAllowed))
-        eob.addTotal(totalOf(FhirMapping.Adjudication.DEDUCTION, adjudication.totalAdjustment))
-        eob.addTotal(totalOf(FhirMapping.Adjudication.COPAY, adjudication.patientResponsibility))
-        eob.addTotal(totalOf(FhirMapping.Adjudication.BENEFIT, adjudication.payerResponsibility))
+        totals(adjudication).forEach { (category, amount) ->
+            eob.addTotal().apply {
+                this.category = FhirMapping.coded(FhirMapping.Systems.ADJUDICATION, category)
+                this.amount = FhirMapping.money(amount)
+            }
+        }
 
         facts.lines.forEach { line ->
             eob.addItem().apply {
                 sequence = line.lineNumber
                 productOrService = FhirMapping.procedure(line.procedureCode, line.procedureCodeSystem)
-                addAdjudication(line)
+                adjudications(line).forEach { (category, amount) ->
+                    addAdjudication().apply {
+                        this.category = FhirMapping.coded(FhirMapping.Systems.ADJUDICATION, category)
+                        this.amount = FhirMapping.money(amount)
+                    }
+                }
             }
         }
 
         // What the payer actually sent, which is what makes the benefit a payment
         // rather than an intention.
-        val paid = facts.insurancePayments.fold(BigDecimal.ZERO) { total, payment -> total + payment.amount }
-        if (paid.signum() > 0) {
+        remittance(facts)?.let { (paid, date) ->
             eob.payment = ExplanationOfBenefit.PaymentComponent().apply {
                 amount = FhirMapping.money(paid)
-                facts.insurancePayments.lastOrNull()?.let { dateElement = FhirMapping.dateOnlyElement(it.paymentDate) }
+                date?.let { dateElement = FhirMapping.dateOnlyElement(it) }
             }
         }
         return eob
     }
 
-    private fun ExplanationOfBenefit.ItemComponent.addAdjudication(line: ClaimRepository.Line) {
-        val allowed = line.allowedAmount ?: return
-        addAdjudication().apply {
-            category = FhirMapping.coded(FhirMapping.Systems.ADJUDICATION, FhirMapping.Adjudication.SUBMITTED)
-            amount = FhirMapping.money(line.chargeAmount)
+    /**
+     * The payer's answer in the shape a payer sends it: a ClaimResponse points at
+     * the Claim it answers and prices it by line sequence, because the payer is
+     * answering someone else's claim rather than restating it.
+     */
+    private fun claimResponseResource(
+        facts: Facts,
+        adjudication: AdjudicationRepository.Adjudication
+    ): ClaimResponse {
+        val response = ClaimResponse()
+        response.id = facts.claim.claimNumber
+        response.addIdentifier(claimNumber(facts.claim.claimNumber))
+        response.status = ClaimResponse.ClaimResponseStatus.ACTIVE
+        response.use = ClaimResponse.Use.CLAIM
+        response.type = professional()
+        // A denial is a complete adjudication, not an incomplete one.
+        response.outcome = ClaimResponse.RemittanceOutcome.COMPLETE
+        // Our claim export writes the claim number as the Claim's id, so this is the
+        // same claim inside a Bundle of the two.
+        response.request = Reference("Claim/${facts.claim.claimNumber}")
+        response.patient = patientReference(facts)
+        response.insurer = payerReference(facts, response)
+        response.createdElement = FhirMapping.instant(adjudication.adjudicatedAt)
+        response.addInsurance().apply {
+            sequence = 1
+            focal = true
+            coverage = Reference("Coverage/${facts.coverage.id}")
         }
-        listOf(
-            FhirMapping.Adjudication.ALLOWED to allowed,
-            FhirMapping.Adjudication.DEDUCTION to line.adjustmentAmount,
-            FhirMapping.Adjudication.COPAY to line.patientResponsibility,
-            FhirMapping.Adjudication.BENEFIT to line.payerAmount,
-        ).forEach { (category, amount) ->
-            if (amount != null) {
-                addAdjudication().apply {
-                    this.category = FhirMapping.coded(FhirMapping.Systems.ADJUDICATION, category)
-                    this.amount = FhirMapping.money(amount)
+
+        totals(adjudication).forEach { (category, amount) ->
+            response.addTotal().apply {
+                this.category = FhirMapping.coded(FhirMapping.Systems.ADJUDICATION, category)
+                this.amount = FhirMapping.money(amount)
+            }
+        }
+
+        facts.lines.forEach { line ->
+            response.addItem().apply {
+                itemSequence = line.lineNumber
+                adjudications(line).forEach { (category, amount) ->
+                    addAdjudication().apply {
+                        this.category = FhirMapping.coded(FhirMapping.Systems.ADJUDICATION, category)
+                        this.amount = FhirMapping.money(amount)
+                    }
                 }
             }
         }
+
+        // What the payer actually sent, which is what makes the benefit a payment
+        // rather than an intention.
+        remittance(facts)?.let { (paid, date) ->
+            response.payment = ClaimResponse.PaymentComponent().apply {
+                amount = FhirMapping.money(paid)
+                date?.let { dateElement = FhirMapping.dateOnlyElement(it) }
+            }
+        }
+        return response
     }
 
-    private fun totalOf(category: String, amount: BigDecimal): ExplanationOfBenefit.TotalComponent =
-        ExplanationOfBenefit.TotalComponent().apply {
-            this.category = FhirMapping.coded(FhirMapping.Systems.ADJUDICATION, category)
-            this.amount = FhirMapping.money(amount)
+    /**
+     * The figures a priced line is reported as, wherever a payer's answer is
+     * written out. One list, so the ExplanationOfBenefit and the ClaimResponse
+     * cannot disagree about what the payer said. A line the payer has not priced
+     * has nothing to report.
+     */
+    private fun adjudications(line: ClaimRepository.Line): List<Pair<String, BigDecimal>> {
+        val allowed = line.allowedAmount ?: return emptyList()
+        return listOfNotNull(
+            FhirMapping.Adjudication.SUBMITTED to line.chargeAmount,
+            FhirMapping.Adjudication.ALLOWED to allowed,
+            line.adjustmentAmount?.let { FhirMapping.Adjudication.DEDUCTION to it },
+            line.patientResponsibility?.let { FhirMapping.Adjudication.COPAY to it },
+            line.payerAmount?.let { FhirMapping.Adjudication.BENEFIT to it },
+        )
+    }
+
+    /** The same figures at the claim level, on the same reasoning. */
+    private fun totals(adjudication: AdjudicationRepository.Adjudication): List<Pair<String, BigDecimal>> = listOf(
+        FhirMapping.Adjudication.SUBMITTED to adjudication.totalCharge,
+        FhirMapping.Adjudication.ALLOWED to adjudication.totalAllowed,
+        FhirMapping.Adjudication.DEDUCTION to adjudication.totalAdjustment,
+        FhirMapping.Adjudication.COPAY to adjudication.patientResponsibility,
+        FhirMapping.Adjudication.BENEFIT to adjudication.payerResponsibility,
+    )
+
+    /**
+     * What the payer has already sent, and when, or null when it has sent nothing:
+     * the remittance is what makes a benefit a payment rather than an intention.
+     */
+    private fun remittance(facts: Facts): Pair<BigDecimal, LocalDate?>? {
+        val paid = facts.insurancePayments.fold(BigDecimal.ZERO) { total, payment -> total + payment.amount }
+        if (paid.signum() <= 0) {
+            return null
         }
+        return paid to facts.insurancePayments.lastOrNull()?.paymentDate
+    }
 
     private fun claimNumber(claimNumber: String): Identifier =
         Identifier().apply {

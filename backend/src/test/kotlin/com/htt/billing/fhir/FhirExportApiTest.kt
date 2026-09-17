@@ -7,6 +7,7 @@ import com.htt.billing.support.TestEnv
 import com.htt.billing.support.assertStatus
 import java.sql.Date
 import org.hl7.fhir.r4.model.Claim
+import org.hl7.fhir.r4.model.ClaimResponse
 import org.hl7.fhir.r4.model.CodeableConcept
 import org.hl7.fhir.r4.model.ExplanationOfBenefit
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -102,6 +103,43 @@ class FhirExportApiTest : BillingApiTest() {
     }
 
     @Test
+    fun exportsThePayersAnswerAsTheClaimResponseAPayerSends() {
+        val claimId = submittedClaim()
+
+        val response = export("claim-response", claimId, exporter.token)
+        assertStatus(200, response)
+        assertEquals("application/fhir+json", response.contentType) { "a FHIR client expects its own media type" }
+
+        val answer = parse(response) as ClaimResponse
+        assertEquals(ClaimResponse.ClaimResponseStatus.ACTIVE, answer.status)
+        assertEquals(ClaimResponse.RemittanceOutcome.COMPLETE, answer.outcome)
+        // It answers the claim, so it points at the Claim our own export writes.
+        assertTrue(answer.request.reference.startsWith("Claim/CLM-")) { answer.request.reference }
+        assertEquals("Imported Export", answer.patient.display)
+        assertEquals("#payer", answer.insurer.reference)
+
+        // The same figures the ExplanationOfBenefit carries, from one list.
+        assertEquals(150.0, total(answer, FhirMapping.Adjudication.SUBMITTED))
+        assertEquals(110.0, total(answer, FhirMapping.Adjudication.ALLOWED))
+        assertEquals(40.0, total(answer, FhirMapping.Adjudication.DEDUCTION))
+        assertEquals(30.0, total(answer, FhirMapping.Adjudication.COPAY))
+        assertEquals(80.0, total(answer, FhirMapping.Adjudication.BENEFIT))
+
+        // Priced by the line the claim numbered, because the payer is answering a
+        // claim it did not write.
+        val item = answer.item.single()
+        assertEquals(1, item.itemSequence)
+        assertEquals(
+            110.0,
+            item.adjudication.first { it.category.codingFirstRep.code == FhirMapping.Adjudication.ALLOWED }
+                .amount.value.toDouble(),
+        )
+
+        assertEquals(80.0, answer.payment.amount.value.toDouble())
+        assertEquals("USD", answer.payment.amount.currency)
+    }
+
+    @Test
     fun aDraftClaimExportsAndHasNothingToExplainYet() {
         val claimId = createClaim()
 
@@ -112,6 +150,7 @@ class FhirExportApiTest : BillingApiTest() {
         val eob = export("eob", claimId, exporter.token)
         assertStatus(404, eob)
         assertTrue(eob.body.path("message").asText().contains("has not been adjudicated")) { eob.text }
+        assertStatus(404, export("claim-response", claimId, exporter.token))
     }
 
     @Test
@@ -140,15 +179,21 @@ class FhirExportApiTest : BillingApiTest() {
         val biller = signIn(RoleCodes.BILLER, practiceA.id)
         assertStatus(403, export("claims", claimId, biller.token))
         assertStatus(403, export("eob", claimId, biller.token))
+        assertStatus(403, export("claim-response", claimId, biller.token))
 
         // Another practice's token cannot see the claim at all, which is "not found"
         // rather than a refusal.
         val outsider = signIn(RoleCodes.PRACTICE_ADMIN, practiceB.id)
         assertStatus(404, export("claims", claimId, outsider.token))
         assertStatus(404, export("eob", claimId, outsider.token))
+        assertStatus(404, export("claim-response", claimId, outsider.token))
     }
 
     private fun total(eob: ExplanationOfBenefit, category: String): Double = eob.total
+        .first { it.category.codingFirstRep.code == category }
+        .amount.value.toDouble()
+
+    private fun total(response: ClaimResponse, category: String): Double = response.total
         .first { it.category.codingFirstRep.code == category }
         .amount.value.toDouble()
 

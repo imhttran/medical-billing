@@ -89,6 +89,17 @@ class ClaimRepository(private val jdbc: JdbcClient) {
         .optional()
         .orElse(null)
 
+    /**
+     * By claim number, which is what a claim is known as outside this practice:
+     * unique across practices, and the key a FHIR import reconciles on.
+     */
+    fun findByClaimNumber(claimNumber: String): Claim? = jdbc
+        .sql("$SELECT WHERE claim_number = :claimNumber")
+        .param("claimNumber", claimNumber)
+        .query(MAPPER)
+        .optional()
+        .orElse(null)
+
     fun findIn(organizationIds: List<Int>, patientId: Int?): List<ClaimSummary> {
         val patientFilter = if (patientId == null) "" else " AND patient_id = :patientId"
         return jdbc
@@ -114,7 +125,12 @@ class ClaimRepository(private val jdbc: JdbcClient) {
 
     /**
      * The claim number comes from a sequence here rather than from the id, so it
-     * is allocated in the same statement that inserts the row.
+     * is allocated in the same statement that inserts the row. A number is passed
+     * in only when the claim arrived from outside with one: an imported claim keeps
+     * the number it was sent with, because that is what it is known as.
+     *
+     * The sequence is only drawn on when there is no number to use — `COALESCE`
+     * does not evaluate what it does not need, so nothing is burnt.
      */
     fun insert(
         organizationId: Int,
@@ -123,6 +139,7 @@ class ClaimRepository(private val jdbc: JdbcClient) {
         coverageId: Int,
         payerId: Int,
         serviceDate: LocalDate?,
+        claimNumber: String? = null,
     ): Claim = jdbc
         .sql(
             """
@@ -130,12 +147,15 @@ class ClaimRepository(private val jdbc: JdbcClient) {
                 (organization_id, claim_number, patient_id, provider_id, coverage_id,
                  payer_id, service_date)
             VALUES
-                (:organizationId, 'CLM-' || lpad(nextval('claim_numbers')::text, 6, '0'),
+                (:organizationId,
+                 COALESCE(CAST(:claimNumber AS TEXT),
+                          'CLM-' || lpad(nextval('claim_numbers')::text, 6, '0')),
                  :patientId, :providerId, :coverageId, :payerId, :serviceDate)
             RETURNING $COLUMNS
             """,
         )
         .param("organizationId", organizationId)
+        .param("claimNumber", claimNumber, Types.VARCHAR)
         .param("patientId", patientId)
         .param("providerId", providerId)
         .param("coverageId", coverageId)

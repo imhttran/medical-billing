@@ -149,7 +149,7 @@ trip, are in **[docs/SPRING_MIGRATION.md](docs/SPRING_MIGRATION.md)**.
 
 ## API
 
-51 endpoints under `/api/*` — see the controllers in
+52 endpoints under `/api/*` — see the controllers in
 `backend/src/main/kotlin/com/htt/billing/identity/`, `.../practice/`,
 `.../patient/`, `.../coverage/`, `.../coding/`, `.../claim/`, `.../payment/`,
 `.../workflow/`, `.../fhir/`:
@@ -172,10 +172,11 @@ trip, are in **[docs/SPRING_MIGRATION.md](docs/SPRING_MIGRATION.md)**.
   the transitions are named actions, and everything else goes through create and
   edit while the claim is still editable
 - **Work queue** (4): list, read, assign, resolve
-- **FHIR** (3): import a Bundle of Patients, Practitioners and Coverages; export a
-  claim as a FHIR Claim; export what the payer made of it as an
-  ExplanationOfBenefit. This is the integration boundary rather than the UI's API,
-  so it answers with `application/fhir+json`
+- **FHIR** (4): import a Bundle of Patients, Practitioners, Coverages and Claims;
+  export a claim as a FHIR Claim; export what the payer made of it as an
+  ExplanationOfBenefit and as the ClaimResponse a payer sends back. This is the
+  integration boundary rather than the UI's API, so it answers with
+  `application/fhir+json`
 - **Demo reset** (1): rebuild the synthetic dataset. Development and demo only —
   the route is not registered anywhere else
 

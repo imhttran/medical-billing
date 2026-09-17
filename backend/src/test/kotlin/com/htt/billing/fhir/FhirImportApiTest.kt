@@ -1,5 +1,6 @@
 package com.htt.billing.fhir
 
+import com.htt.billing.claim.ClaimStatus
 import com.htt.billing.security.RoleCodes
 import com.htt.billing.support.BillingApiTest
 import com.htt.billing.support.TestEnv
@@ -201,6 +202,119 @@ class FhirImportApiTest : BillingApiTest() {
         assertEquals(practiceB.id, derived.body.path("organizationId").asInt())
     }
 
+    @Test
+    fun importsAClaimWithTheRecordsItNamesInTheSameBundle() {
+        val response = importBundle(
+            bundleOf(patient(id = "p1"), practitioner(id = "prac1"), coverage(entryId = "cov1"), claim()),
+        )
+
+        assertStatus(200, response)
+        val imported = response.body.path("imported")
+        assertEquals(
+            listOf("Patient", "Practitioner", "Coverage", "Claim"),
+            imported.map { it.path("resourceType").asText() },
+        ) { response.text }
+        assertEquals("IMP-CLM-1", imported.get(3).path("identifier").asText())
+
+        val claimId = imported.get(3).path("id").asInt()
+        val shown = env.doJson("GET", "/api/claims/$claimId", importer.token, null)
+        assertStatus(200, shown)
+        // Not the status the resource carried: an imported claim arrives as a draft
+        // for the practice to check, validate and send.
+        assertEquals(ClaimStatus.DRAFT.name, shown.body.path("claim").path("status").asText())
+        assertEquals(imported.get(0).path("id").asInt(), shown.body.path("claim").path("patientId").asInt())
+        assertEquals(imported.get(2).path("id").asInt(), shown.body.path("claim").path("coverageId").asInt()) {
+            "the focal coverage is the primary one, wherever the sender listed it"
+        }
+        assertEquals("2026-03-02", shown.body.path("claim").path("serviceDate").asText())
+        assertEquals(listOf("J06.9"), shown.body.path("diagnoses").map { it.path("diagnosisCode").asText() })
+        val line = shown.body.path("lines").single()
+        assertEquals("99213", line.path("procedureCode").asText())
+        assertEquals(1, line.path("quantity").asInt())
+        assertEquals(150.0, line.path("chargeAmount").asDouble())
+        assertEquals("PENDING", line.path("status").asText()) { "nothing prices an imported claim until it is sent" }
+    }
+
+    @Test
+    fun aClaimIsReconciledOnIdentifiersThePracticeAlreadyHolds() {
+        // The records first, then the claim naming them the way another system
+        // would: the patient by the identifier it was reconciled on, the provider by
+        // NPI, the coverage by member id.
+        importBundle(bundleOf(patient(), practitioner(), coverage()))
+
+        val first = importBundle(bundleOf(claim()))
+        assertStatus(200, first)
+        assertEquals(listOf("created"), first.body.path("imported").map { it.path("action").asText() }) { first.text }
+        val claimId = first.body.path("imported").get(0).path("id").asInt()
+
+        // The same claim number with a different service: the practice's own claim
+        // is updated rather than a second one written.
+        val again = importBundle(bundleOf(claim(items = listOf(item(code = "99214", charge = 200.0)))))
+        assertStatus(200, again)
+        assertEquals(listOf("updated"), again.body.path("imported").map { it.path("action").asText() }) { again.text }
+        assertEquals(claimId, again.body.path("imported").get(0).path("id").asInt())
+
+        val shown = env.doJson("GET", "/api/claims/$claimId", importer.token, null)
+        assertEquals(listOf("99214"), shown.body.path("lines").map { it.path("procedureCode").asText() })
+        assertEquals(200.0, shown.body.path("lines").get(0).path("chargeAmount").asDouble())
+        val listed = env.doJson("GET", "/api/claims", importer.token, null)
+        assertEquals(1, listed.body.path("claims").size()) { listed.text }
+    }
+
+    @Test
+    fun refusesToImportOntoAClaimThePayerHasAlreadyAnswered() {
+        val imported = importBundle(
+            bundleOf(patient(id = "p1"), practitioner(id = "prac1"), coverage(entryId = "cov1"), claim()),
+        )
+        val claimId = imported.body.path("imported").get(3).path("id").asInt()
+        assertStatus(200, env.doJson("POST", "/api/claims/$claimId/ready", importer.token, null))
+        val submitted = env.doJson("POST", "/api/claims/$claimId/submit", importer.token, null)
+        assertEquals(ClaimStatus.ADJUDICATED.name, submitted.body.path("claim").path("status").asText())
+
+        // A claim the payer has priced is not something an import can rewrite.
+        val again = importBundle(bundleOf(claim(items = listOf(item(code = "99214", charge = 200.0)))))
+        assertStatus(400, again)
+        assertTrue(hasIssue(again, FhirImportService.CLAIM_NOT_EDITABLE)) { again.text }
+
+        val shown = env.doJson("GET", "/api/claims/$claimId", importer.token, null)
+        assertEquals(ClaimStatus.ADJUDICATED.name, shown.body.path("claim").path("status").asText())
+        assertEquals(listOf("99213"), shown.body.path("lines").map { it.path("procedureCode").asText() })
+    }
+
+    @Test
+    fun aClaimNamingAPatientNobodyKnowsIsRefusedWhole() {
+        val response = importBundle(
+            bundleOf(
+                patient(id = "p1"),
+                claim(
+                    patient = mapOf("identifier" to mapOf("system" to MRN_SYSTEM, "value" to "MRN-NOBODY")),
+                    provider = mapOf("reference" to "Practitioner/prac1"),
+                    coverage = mapOf("reference" to "Coverage/cov1"),
+                ),
+            ),
+        )
+
+        assertStatus(400, response)
+        assertTrue(hasIssue(response, FhirImportService.CLAIM_NO_PATIENT)) { response.text }
+        // The patient it did name in the same bundle went back with it.
+        val patients = env.doJson("GET", "/api/patients?query=Imported", importer.token, null)
+        assertTrue(patients.body.path("patients").isEmpty) { patients.text }
+    }
+
+    @Test
+    fun aClaimWithNoClaimNumberOrNoChargeIsRefused() {
+        val noNumber = importBundle(bundleOf(claim(identifiers = emptyList<Map<String, Any?>>())))
+        assertStatus(400, noNumber)
+        assertTrue(hasIssue(noNumber, FhirImportService.CLAIM_NO_NUMBER)) { noNumber.text }
+
+        // A line with no charge is a line nothing can be billed for.
+        val noCharge = importBundle(
+            bundleWithRecords(claim(items = listOf(item(charge = null)))),
+        )
+        assertStatus(400, noCharge)
+        assertTrue(hasIssue(noCharge, FhirImportService.CLAIM_LINE_NO_CHARGE)) { noCharge.text }
+    }
+
     private fun hasIssue(response: TestEnv.Response, code: String): Boolean =
         response.body.path("issues").any { it.path("code").asText() == code }
 
@@ -209,6 +323,14 @@ class FhirImportApiTest : BillingApiTest() {
 
     private fun importBundle(bundle: Map<String, Any?>): TestEnv.Response =
         importAs(importer, practiceA.id, bundle)
+
+    /**
+     * A bundle that carries the records a claim names — the patient, the provider and
+     * the coverage, each reconciled on the identifier the claim refers to it by — so
+     * a test about the claim has nothing else in its way.
+     */
+    private fun bundleWithRecords(vararg more: Map<String, Any?>): Map<String, Any?> =
+        bundleOf(patient(), practitioner(), coverage(), *more)
 
     private fun importAs(
         session: BillingApiTest.Session,
@@ -228,6 +350,7 @@ class FhirImportApiTest : BillingApiTest() {
         family: String = "Imported",
         city: String? = null,
         identifiers: List<Map<String, Any?>>? = null,
+        id: String? = null,
     ): Map<String, Any?> = mapOf(
         "resourceType" to "Patient",
         "identifier" to (identifiers ?: listOf(mapOf("system" to MRN_SYSTEM, "value" to value))),
@@ -241,9 +364,9 @@ class FhirImportApiTest : BillingApiTest() {
             "state" to "TX",
             "postalCode" to "78701",
         ),
-    )
+    ).plus(id?.let { mapOf("id" to it) } ?: emptyMap())
 
-    private fun practitioner(): Map<String, Any?> = mapOf(
+    private fun practitioner(id: String? = null): Map<String, Any?> = mapOf(
         "resourceType" to "Practitioner",
         "identifier" to listOf(
             mapOf("system" to MRN_SYSTEM, "value" to "PRAC-88"),
@@ -259,9 +382,9 @@ class FhirImportApiTest : BillingApiTest() {
                 ),
             ),
         ),
-    )
+    ).plus(id?.let { mapOf("id" to it) } ?: emptyMap())
 
-    private fun coverage(memberId: String = "IMP9001"): Map<String, Any?> = mapOf(
+    private fun coverage(memberId: String = "IMP9001", entryId: String? = null): Map<String, Any?> = mapOf(
         "resourceType" to "Coverage",
         "identifier" to listOf(mapOf("system" to "urn:payer:member", "value" to memberId)),
         "status" to "active",
@@ -279,7 +402,81 @@ class FhirImportApiTest : BillingApiTest() {
                 "value" to "GRP-IMPORT",
             ),
         ),
+    ).plus(entryId?.let { mapOf("id" to it) } ?: emptyMap())
+
+    /**
+     * A claim as another system sends one.
+     *
+     * Its references default to the entries the helpers above write when they are
+     * given an id, and to the identifiers they are reconciled on when they are not —
+     * which is the two ways a claim can name a record it is not carrying.
+     */
+    private fun claim(
+        number: String = "IMP-CLM-1",
+        patient: Map<String, Any?> = mapOf(
+            "identifier" to mapOf("system" to MRN_SYSTEM, "value" to "MRN-4471"),
+        ),
+        provider: Map<String, Any?> = mapOf(
+            "identifier" to mapOf("system" to FhirMapping.Systems.NPI, "value" to "1245319599"),
+        ),
+        coverage: Map<String, Any?> = mapOf("identifier" to mapOf("value" to "IMP9001")),
+        identifiers: List<Map<String, Any?>>? = null,
+        items: List<Map<String, Any?>> = listOf(item()),
+    ): Map<String, Any?> = mapOf(
+        "resourceType" to "Claim",
+        "identifier" to (
+                identifiers ?: listOf(mapOf("system" to FhirExportService.CLAIM_NUMBER_SYSTEM, "value" to number))
+                ),
+        // Whatever the sender called it: an import does not take a status from a
+        // resource, so this is not the status the claim is written with.
+        "status" to "active",
+        "use" to "claim",
+        "type" to mapOf(
+            "coding" to listOf(mapOf("system" to FhirMapping.Systems.CLAIM_TYPE, "code" to "professional")),
+        ),
+        "patient" to patient,
+        "provider" to provider,
+        "created" to "2026-03-01",
+        "priority" to mapOf("coding" to listOf(mapOf("code" to "normal"))),
+        // Two coverages with the focal one second, which is the order a sender that
+        // lists secondary insurance first writes: the focal one is the primary.
+        "insurance" to listOf(
+            mapOf(
+                "sequence" to 2,
+                "focal" to false,
+                "coverage" to mapOf("identifier" to mapOf("value" to "NOT-THE-ONE"))
+            ),
+            mapOf("sequence" to 1, "focal" to true, "coverage" to coverage),
+        ),
+        "billablePeriod" to mapOf("start" to "2026-03-02"),
+        // The R4 spelling of the element, which is what a conformant sender writes;
+        // HAPI alone would drop it, which is why the import renames it before parsing.
+        "diagnosis" to listOf(
+            mapOf(
+                "sequence" to 1,
+                "diagnosis" to mapOf(
+                    "coding" to listOf(mapOf("system" to FhirMapping.Systems.ICD_10_CM, "code" to "J06.9")),
+                ),
+            ),
+        ),
+        "item" to items,
+        "total" to mapOf("value" to 150.0, "currency" to "USD"),
     )
+
+    /** A service line, with either half left out when the case is about it. */
+    private fun item(code: String? = "99213", charge: Double? = 150.0): Map<String, Any?> {
+        val item = mutableMapOf<String, Any?>(
+            "sequence" to 1,
+            "quantity" to mapOf("value" to 1),
+        )
+        code?.let {
+            item["productOrService"] = mapOf(
+                "coding" to listOf(mapOf("system" to FhirMapping.Systems.CPT, "code" to it)),
+            )
+        }
+        charge?.let { item["net"] = mapOf("value" to it, "currency" to "USD") }
+        return item
+    }
 
     /** PRACTICE_ADMIN holds FHIR_IMPORT, and can read back what it imported. */
     private val importer by lazy { signIn(RoleCodes.PRACTICE_ADMIN, practiceA.id) }

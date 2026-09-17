@@ -1,6 +1,8 @@
 package com.htt.billing.fhir
 
 import ca.uhn.fhir.parser.DataFormatException
+import com.htt.billing.claim.ClaimRepository
+import com.htt.billing.claim.ClaimStatus
 import com.htt.billing.common.error.Issue
 import com.htt.billing.common.error.ValidationException
 import com.htt.billing.common.error.ValidationIssuesException
@@ -10,19 +12,23 @@ import com.htt.billing.patient.PatientRepository
 import com.htt.billing.practice.ProviderRepository
 import com.htt.billing.security.AuthorizationService
 import com.htt.billing.security.Permissions
+import java.math.BigDecimal
 import java.time.LocalDate
 import org.hl7.fhir.r4.model.Bundle
+import org.hl7.fhir.r4.model.Claim
+import org.hl7.fhir.r4.model.CodeableConcept
 import org.hl7.fhir.r4.model.ContactPoint
 import org.hl7.fhir.r4.model.Coverage
 import org.hl7.fhir.r4.model.Patient
 import org.hl7.fhir.r4.model.Practitioner
+import org.hl7.fhir.r4.model.Reference
 import org.hl7.fhir.r4.model.Resource
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
 
 /**
- * FHIR import: a Bundle of Patients, Practitioners and Coverages from another
- * system, reconciled onto the practice's own records.
+ * FHIR import: a Bundle of Patients, Practitioners, Coverages and Claims from
+ * another system, reconciled onto the practice's own records.
  *
  * The whole bundle is one transaction and one answer. Half an import is worse than
  * none — a practice that has the patient but not their coverage cannot bill — so a
@@ -32,8 +38,11 @@ import org.springframework.transaction.support.TransactionTemplate
  *
  * Reconciliation is by the identifier the source system used, which is why
  * `external_id` exists on patients and providers; a Coverage has no identifier of
- * its own, so it reconciles on the member it names. A record the practice already
- * holds is updated rather than duplicated.
+ * its own, so it reconciles on the member it names, and a Claim on its claim
+ * number. A record the practice already holds is updated rather than duplicated.
+ *
+ * A resource may also be referred to by a reference into the same bundle, which is
+ * how a sender links a claim to a patient it is sending in the same breath.
  */
 @Service
 class FhirImportService(
@@ -42,6 +51,7 @@ class FhirImportService(
     private val providers: ProviderRepository,
     private val coverages: CoverageRepository,
     private val payers: PayerRepository,
+    private val claims: ClaimRepository,
     private val authorization: AuthorizationService,
     private val transactions: TransactionTemplate,
 ) {
@@ -61,7 +71,7 @@ class FhirImportService(
             throw ValidationException("A FHIR Bundle is required")
         }
         val bundle = try {
-            fhir.parser().parseResource(String(body, Charsets.UTF_8))
+            fhir.parser().parseResource(hapiSpelling(String(body, Charsets.UTF_8)))
         } catch (notFhir: DataFormatException) {
             throw ValidationException("The body is not a FHIR resource: ${notFhir.message}")
         }
@@ -75,16 +85,25 @@ class FhirImportService(
         val skipped = entries.map { it.resourceType.name }.filter { it !in HANDLED }.distinct()
 
         transactions.executeWithoutResult {
-            // Order matters: a coverage names a patient, and both name a practice.
+            // Order matters: a coverage names a patient, both name a practice, and a
+            // claim names all three. Each resource that has been written records the
+            // ids it can be referred to by, so a later entry in the bundle can point
+            // at it.
             val patientIds = mutableMapOf<String, Int>()
+            val providerIds = mutableMapOf<String, Int>()
+            val coverageIds = mutableMapOf<String, Int>()
             entries.filterIsInstance<Patient>().forEach { resource ->
                 upsertPatient(organizationId, resource, patientIds, issues)?.let { outcomes += it }
             }
             entries.filterIsInstance<Practitioner>().forEach { resource ->
-                upsertPractitioner(organizationId, resource, issues)?.let { outcomes += it }
+                upsertPractitioner(organizationId, resource, providerIds, issues)?.let { outcomes += it }
             }
             entries.filterIsInstance<Coverage>().forEach { resource ->
-                upsertCoverage(organizationId, resource, patientIds, issues)?.let { outcomes += it }
+                upsertCoverage(organizationId, resource, patientIds, coverageIds, issues)?.let { outcomes += it }
+            }
+            entries.filterIsInstance<Claim>().forEach { resource ->
+                upsertClaim(organizationId, resource, patientIds, providerIds, coverageIds, issues)
+                    ?.let { outcomes += it }
             }
             if (issues.isNotEmpty()) {
                 // Rolls the transaction back, so nothing half-applied survives.
@@ -179,6 +198,7 @@ class FhirImportService(
     private fun upsertPractitioner(
         organizationId: Int,
         resource: Practitioner,
+        providerIds: MutableMap<String, Int>,
         issues: MutableList<Issue>,
     ): Outcome? {
         val identifier = resource.identifier.firstOrNull { !it.value.isNullOrBlank() }
@@ -219,6 +239,10 @@ class FhirImportService(
             issues += Issue(PRACTITIONER_NO_NAME, "Practitioner ${externalId ?: name.family} could not be written")
             return null
         }
+        externalId?.let { providerIds[it] = saved.id }
+        npi?.let { providerIds[it] = saved.id }
+        referenceKey(resource.id)?.let { providerIds[it] = saved.id }
+        referenceKey(resource.idElement?.value)?.let { providerIds[it] = saved.id }
         return Outcome(PRACTITIONER, if (existing == null) ACTION_CREATED else ACTION_UPDATED, saved.id, externalId)
     }
 
@@ -235,6 +259,7 @@ class FhirImportService(
         organizationId: Int,
         resource: Coverage,
         patientIds: Map<String, Int>,
+        coverageIds: MutableMap<String, Int>,
         issues: MutableList<Issue>,
     ): Outcome? {
         val memberId = resource.identifier.firstOrNull { !it.value.isNullOrBlank() }?.value
@@ -312,8 +337,223 @@ class FhirImportService(
             issues += Issue(COVERAGE_NO_MEMBER_ID, "Coverage $memberId could not be written")
             return null
         }
+        coverageIds[memberId] = saved.id
+        referenceKey(resource.id)?.let { coverageIds[it] = saved.id }
+        referenceKey(resource.idElement?.value)?.let { coverageIds[it] = saved.id }
         return Outcome(COVERAGE, if (existing == null) ACTION_CREATED else ACTION_UPDATED, saved.id, memberId)
     }
+
+    /**
+     * A claim, reconciled on its claim number: the identifier a claim carries
+     * between systems, and the only thing about it another system can know.
+     *
+     * The status is not taken from the resource. An imported claim arrives as a
+     * draft for the practice to check, validate and send — the state machine in
+     * [ClaimStatus] is the only writer of a status, and an incoming resource does
+     * not get to put a claim into a state it cannot be in. The payer comes from the
+     * coverage, as it does when a claim is written on the claim screen, so the two
+     * can never disagree.
+     */
+    private fun upsertClaim(
+        organizationId: Int,
+        resource: Claim,
+        patientIds: Map<String, Int>,
+        providerIds: Map<String, Int>,
+        coverageIds: Map<String, Int>,
+        issues: MutableList<Issue>,
+    ): Outcome? {
+        val claimNumber = resource.identifier.firstOrNull { !it.value.isNullOrBlank() }?.value
+            ?: referenceKey(resource.idElement?.idPart)
+        if (claimNumber.isNullOrBlank()) {
+            issues += Issue(CLAIM_NO_NUMBER, "A Claim needs a claim number to be reconciled on")
+            return null
+        }
+
+        val existing = claims.findByClaimNumber(claimNumber)
+        if (existing != null && existing.organizationId != organizationId) {
+            // Claim numbers are unique across practices, so this is a number this
+            // practice cannot use rather than a claim it can update.
+            issues += Issue(CLAIM_NUMBER_TAKEN, "Claim $claimNumber is already used by another practice")
+            return null
+        }
+        if (existing != null && !ClaimStatus.isEditable(existing.status)) {
+            issues += Issue(
+                CLAIM_NOT_EDITABLE,
+                "Claim $claimNumber is ${existing.status}, so it can no longer be imported onto",
+            )
+            return null
+        }
+
+        val patientId = referredRow(
+            reference = resource.patient,
+            bundleIds = patientIds,
+            byIdentifier = { patients.findByExternalId(organizationId, it)?.id },
+            byRowId = { patients.findById(it)?.takeIf { row -> row.organizationId == organizationId }?.id },
+        )
+        if (patientId == null) {
+            issues += Issue(
+                CLAIM_NO_PATIENT,
+                "Claim $claimNumber does not name a patient in this import or in this practice",
+            )
+            return null
+        }
+
+        val providerId = referredRow(
+            reference = resource.provider,
+            bundleIds = providerIds,
+            byIdentifier = { identifier ->
+                val npi = FhirMapping.splitIdentifier(identifier)
+                    ?.takeIf { (system, _) -> system == FhirMapping.Systems.NPI }
+                // The NPI is what a provider is named by between systems; failing
+                // that, the source system's own identifier.
+                npi?.let { providers.findByNpi(organizationId, it.second)?.id }
+                    ?: providers.findByExternalId(organizationId, identifier)?.id
+            },
+            byRowId = { providers.findById(it)?.takeIf { row -> row.organizationId == organizationId }?.id },
+        )
+        if (providerId == null) {
+            issues += Issue(
+                CLAIM_NO_PROVIDER,
+                "Claim $claimNumber does not name a provider in this import or in this practice",
+            )
+            return null
+        }
+
+        // The focal insurance is the primary one, whatever order the sender listed
+        // them in; a claim here is billed against one coverage.
+        val primary = resource.insurance.firstOrNull { it.focal } ?: resource.insurance.firstOrNull()
+        val coverageId = primary?.coverage?.let { reference ->
+            referredRow(
+                reference = reference,
+                bundleIds = coverageIds,
+                byIdentifier = { identifier ->
+                    // A coverage has no identifier of its own: the member is what it
+                    // reconciles on, and only within this patient's coverages.
+                    val memberId = FhirMapping.splitIdentifier(identifier)?.second
+                    coverages.findByPatient(patientId).firstOrNull { it.memberId == memberId }?.id
+                },
+                byRowId = { coverages.findById(it)?.takeIf { row -> row.organizationId == organizationId }?.id },
+            )
+        }
+        val coverage = coverageId?.let { coverages.findById(it) }
+        if (coverage == null) {
+            // Without a coverage there is no payer, and the payer is not taken from
+            // the resource: the claim and its coverage could then disagree.
+            issues += Issue(
+                CLAIM_NO_COVERAGE,
+                "Claim $claimNumber does not name a coverage in this import or in this practice",
+            )
+            return null
+        }
+
+        val lines = resource.item.mapIndexedNotNull { index, item ->
+            lineOf(index, item, claimNumber, issues)
+        }
+        if (lines.size != resource.item.size) {
+            // The issues name every line that could not be written.
+            return null
+        }
+        val diagnoses = resource.diagnosis
+            // A CodeableConcept, not a reference to a Condition: only the code is
+            // imported, and the cast is how HAPI's choice element is read.
+            .mapNotNull { (it.diagnosis as? CodeableConcept)?.codingFirstRep?.code }
+            .filter { it.isNotBlank() }
+            .distinct()
+        val serviceDate = resource.billablePeriod?.start?.let { LocalDate.ofInstant(it.toInstant(), ZONE) }
+
+        val saved = if (existing == null) {
+            claims.insert(
+                organizationId = organizationId,
+                patientId = patientId,
+                providerId = providerId,
+                coverageId = coverage.id,
+                payerId = coverage.payerId,
+                serviceDate = serviceDate,
+                claimNumber = claimNumber,
+            )
+        } else {
+            claims.updateHeader(
+                id = existing.id,
+                patientId = patientId,
+                providerId = providerId,
+                coverageId = coverage.id,
+                payerId = coverage.payerId,
+                serviceDate = serviceDate,
+            )
+        }
+        if (saved == null) {
+            issues += Issue(CLAIM_NOT_EDITABLE, "Claim $claimNumber could not be written")
+            return null
+        }
+        claims.replaceDiagnoses(saved.id, diagnoses)
+        claims.replaceLines(saved.id, lines)
+        // Editing a rejected claim is the correction itself, exactly as it is on
+        // the claim screen; nothing else may touch a rejected claim.
+        if (saved.status == ClaimStatus.REJECTED) {
+            claims.updateStatus(saved.id, ClaimStatus.CORRECTED, submittedAt = null)
+        }
+        return Outcome(CLAIM, if (existing == null) ACTION_CREATED else ACTION_UPDATED, saved.id, claimNumber)
+    }
+
+    /**
+     * One service line, or null when it cannot be written — the issue says why.
+     *
+     * `net` is the line's total when the sender wrote one; a sender that priced by
+     * the unit instead gets its arithmetic done for it rather than a charge guessed
+     * from the unit price alone.
+     */
+    private fun lineOf(
+        index: Int,
+        item: Claim.ItemComponent,
+        claimNumber: String,
+        issues: MutableList<Issue>,
+    ): ClaimRepository.LineInput? {
+        val number = index + 1
+        val procedureCode = item.productOrService?.codingFirstRep?.code
+        if (procedureCode.isNullOrBlank()) {
+            issues += Issue(CLAIM_LINE_NO_PROCEDURE, "Line $number of claim $claimNumber has no procedure code")
+            return null
+        }
+        val quantity = item.quantity?.value?.toInt() ?: 1
+        val charge = item.net?.value ?: item.unitPrice?.value?.multiply(BigDecimal(quantity))
+        if (charge == null) {
+            issues += Issue(CLAIM_LINE_NO_CHARGE, "Line $number of claim $claimNumber has no charge")
+            return null
+        }
+        return ClaimRepository.LineInput(number, procedureCode, quantity, charge)
+    }
+
+    /**
+     * Who a reference names, tried most specific first: an entry in this bundle, an
+     * identifier the practice already holds, then one of the practice's own rows.
+     * Null when none of the three knows it, which is a refusal rather than a guess.
+     */
+    private fun referredRow(
+        reference: Reference,
+        bundleIds: Map<String, Int>,
+        byIdentifier: (String) -> Int?,
+        byRowId: (Int) -> Int?,
+    ): Int? = referenceKey(reference.reference)?.let { bundleIds[it] }
+        ?: joinedIdentifier(reference)?.let(byIdentifier)
+        ?: referenceKey(reference.reference)?.toIntOrNull()?.let(byRowId)
+
+    /** The identifier on a reference, joined the way our own columns hold one. */
+    private fun joinedIdentifier(reference: Reference): String? =
+        reference.identifier?.value
+            ?.takeIf { it.isNotBlank() }
+            ?.let { FhirMapping.externalIdentifier(reference.identifier.system, it) }
+
+    /**
+     * HAPI's R4 model types `Claim.diagnosis.diagnosis` as a choice and spells the
+     * element `diagnosisCodeableConcept` in JSON, where R4 spells it `diagnosis`.
+     * HAPI throws the name it does not recognise away — with a warning on the log and
+     * nothing else — so a claim from a conformant sender would arrive with no
+     * diagnoses at all. The element is renamed to HAPI's spelling before the body is
+     * parsed, which is the one place the two vocabularies differ. The nested
+     * diagnosis of an ExplanationOfBenefit is the same element and is renamed with it.
+     */
+    private fun hapiSpelling(body: String): String =
+        DIAGNOSIS_ELEMENT.replace(body) { match -> "\"diagnosisCodeableConcept\"${match.groupValues[1]}{" }
 
     /** The id a reference and a resource agree on, whatever shape each was written in. */
     private fun referenceKey(reference: String?): String? =
@@ -328,6 +568,7 @@ class FhirImportService(
         const val PATIENT = "Patient"
         const val PRACTITIONER = "Practitioner"
         const val COVERAGE = "Coverage"
+        const val CLAIM = "Claim"
 
         const val ACTION_CREATED = "created"
         const val ACTION_UPDATED = "updated"
@@ -339,8 +580,19 @@ class FhirImportService(
         const val COVERAGE_NO_MEMBER_ID = "FHIR_COVERAGE_NO_MEMBER_ID"
         const val COVERAGE_NO_PATIENT = "FHIR_COVERAGE_NO_PATIENT"
         const val COVERAGE_NO_PAYER = "FHIR_COVERAGE_NO_PAYER"
+        const val CLAIM_NO_NUMBER = "FHIR_CLAIM_NO_NUMBER"
+        const val CLAIM_NUMBER_TAKEN = "FHIR_CLAIM_NUMBER_TAKEN"
+        const val CLAIM_NOT_EDITABLE = "FHIR_CLAIM_NOT_EDITABLE"
+        const val CLAIM_NO_PATIENT = "FHIR_CLAIM_NO_PATIENT"
+        const val CLAIM_NO_PROVIDER = "FHIR_CLAIM_NO_PROVIDER"
+        const val CLAIM_NO_COVERAGE = "FHIR_CLAIM_NO_COVERAGE"
+        const val CLAIM_LINE_NO_PROCEDURE = "FHIR_CLAIM_LINE_NO_PROCEDURE"
+        const val CLAIM_LINE_NO_CHARGE = "FHIR_CLAIM_LINE_NO_CHARGE"
 
-        private val HANDLED = setOf(PATIENT, PRACTITIONER, COVERAGE)
+        /** `"diagnosis": {` — the element itself, never the array it sits in. */
+        private val DIAGNOSIS_ELEMENT = Regex("\"diagnosis\"(\\s*:\\s*)\\{")
+
+        private val HANDLED = setOf(PATIENT, PRACTITIONER, COVERAGE, CLAIM)
         private val ZONE = java.time.ZoneOffset.UTC
     }
 }
