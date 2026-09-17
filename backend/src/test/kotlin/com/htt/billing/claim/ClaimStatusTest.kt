@@ -64,6 +64,12 @@ class ClaimStatusTest {
     }
 
     @Test
+    fun aRejectedClaimIsEditableSoTheRejectionIsNotADeadEnd() {
+        assertTrue(ClaimStatus.isEditable(REJECTED))
+        assertTrue(ClaimStatus.isEditable(CORRECTED))
+    }
+
+    @Test
     fun onlyAPreSubmissionClaimIsEditable() {
         assertTrue(ClaimStatus.isEditable(DRAFT))
         assertTrue(ClaimStatus.isEditable(READY))

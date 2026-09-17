@@ -33,6 +33,14 @@ class ClaimRepository(private val jdbc: JdbcClient) {
         val status: ClaimStatus,
         val submissionVersion: Int,
         val submittedAt: Instant?,
+        /*
+         * The payer's reason for rejecting the claim, and null on any claim it
+         * did not reject. It describes the status, so it is replaced by the next
+         * payer answer rather than kept as a history.
+         */
+        val rejectionCode: String?,
+        val rejectionMessage: String?,
+        val rejectedAt: Instant?,
     )
 
     /** A claim plus the figure the list needs, which comes from its lines. */
@@ -160,12 +168,29 @@ class ClaimRepository(private val jdbc: JdbcClient) {
         .optional()
         .orElse(null)
 
-    fun updateStatus(id: Int, status: ClaimStatus, submittedAt: Instant?): Claim? = jdbc
+    /**
+     * Moves the claim, and records the payer's rejection in the same statement:
+     * every call passes the rejection it has, so a claim that is not being
+     * rejected has the previous one cleared. `submission_version` counts a move
+     * into RESUBMITTED, because that move is what a resubmission is.
+     */
+    fun updateStatus(
+        id: Int,
+        status: ClaimStatus,
+        submittedAt: Instant?,
+        rejectionCode: String? = null,
+        rejectionMessage: String? = null,
+    ): Claim? = jdbc
         .sql(
             """
             UPDATE claims
             SET status = :status,
                 submitted_at = COALESCE(:submittedAt, submitted_at),
+                submission_version = submission_version
+                    + CASE WHEN :status = 'RESUBMITTED' THEN 1 ELSE 0 END,
+                rejection_code = :rejectionCode,
+                rejection_message = :rejectionMessage,
+                rejected_at = :rejectedAt,
                 updated_at = now()
             WHERE id = :id
             RETURNING $COLUMNS
@@ -174,6 +199,13 @@ class ClaimRepository(private val jdbc: JdbcClient) {
         .param("id", id)
         .param("status", status.name)
         .param("submittedAt", submittedAt?.atOffset(ZoneOffset.UTC), Types.TIMESTAMP_WITH_TIMEZONE)
+        .param("rejectionCode", rejectionCode, Types.VARCHAR)
+        .param("rejectionMessage", rejectionMessage, Types.VARCHAR)
+        .param(
+            "rejectedAt",
+            if (rejectionCode == null) null else Instant.now().atOffset(ZoneOffset.UTC),
+            Types.TIMESTAMP_WITH_TIMEZONE,
+        )
         .query(MAPPER)
         .optional()
         .orElse(null)
@@ -255,7 +287,9 @@ class ClaimRepository(private val jdbc: JdbcClient) {
             patient_id AS "patientId", provider_id AS "providerId",
             coverage_id AS "coverageId", payer_id AS "payerId",
             service_date AS "serviceDate", status,
-            submission_version AS "submissionVersion", submitted_at AS "submittedAt"
+            submission_version AS "submissionVersion", submitted_at AS "submittedAt",
+            rejection_code AS "rejectionCode",
+            rejection_message AS "rejectionMessage", rejected_at AS "rejectedAt"
         """
 
         // Unqualified on purpose: RETURNING cannot reference a table alias, so one
@@ -285,6 +319,9 @@ class ClaimRepository(private val jdbc: JdbcClient) {
                 ClaimStatus.valueOf(rs.getString("status")),
                 rs.getInt("submissionVersion"),
                 rs.getObject("submittedAt", OffsetDateTime::class.java)?.toInstant(),
+                rs.getString("rejectionCode"),
+                rs.getString("rejectionMessage"),
+                rs.getObject("rejectedAt", OffsetDateTime::class.java)?.toInstant(),
             )
         }
 

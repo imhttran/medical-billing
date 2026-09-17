@@ -10,10 +10,10 @@ import com.htt.billing.common.error.ValidationException
  * domain allows and nothing else, which is what keeps a CRUD endpoint from
  * putting a claim into a state it cannot be in.
  *
- * Reachable today: DRAFT, READY, SUBMITTED, ACCEPTED, ADJUDICATED and DENIED.
- * The rest are named because they are part of the intended state space, and the
- * workflows that reach them (rejection, correction, resubmission, payments)
- * arrive with their own milestones.
+ * Reachable today: DRAFT, READY, SUBMITTED, ACCEPTED, ADJUDICATED, DENIED,
+ * REJECTED, CORRECTED and RESUBMITTED. The rest are named because they are part
+ * of the intended state space, and the workflows that reach them (payments,
+ * closure) arrive with their own milestones.
  */
 enum class ClaimStatus {
 
@@ -57,8 +57,13 @@ enum class ClaimStatus {
             }
         }
 
-        /** A claim in one of these may still be edited. */
+        /**
+         * A claim in one of these may still be edited. REJECTED and CORRECTED are
+         * here because a rejected claim has to be fixable: correcting it is the
+         * move back out of REJECTED, and editing a corrected one before it goes
+         * out again is the same work.
+         */
         fun isEditable(status: ClaimStatus): Boolean =
-            status == DRAFT || status == READY
+            status == DRAFT || status == READY || status == REJECTED || status == CORRECTED
     }
 }

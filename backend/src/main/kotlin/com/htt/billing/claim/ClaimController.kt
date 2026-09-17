@@ -15,9 +15,10 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * Claims. There is no endpoint that sets a status: the two transitions this
- * exposes are named actions the domain allows, and everything else about a claim
- * goes through create and update while it is still editable.
+ * Claims. There is no endpoint that sets a status: the transitions this exposes
+ * are named actions the domain allows, and everything else about a claim goes
+ * through create and update while it is still editable. Submitting does double
+ * duty — a ready claim goes out, and a rejected or corrected one goes back out.
  */
 @RestController
 @RequestMapping("/api/claims")

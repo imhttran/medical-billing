@@ -31,10 +31,10 @@ object DemoDataset {
     /**
      * What the local login is granted in the demo practice.
      *
-     * Both roles, because one demo account has to be able to do everything: the
-     * practice admin supervises but holds only CLAIM_VIEW, so creating and
-     * submitting a claim needs a billing role as well. A real deployment has
-     * separate people for the two.
+     * Both roles, because one demo account has to be able to do everything the
+     * screens offer: an admin runs the practice and works its claims, but voiding
+     * one and recording payments belong to the billing roles, which a real
+     * deployment gives to someone else.
      */
     val DEV_ADMIN_ROLES: List<String> = listOf("PRACTICE_ADMIN", "BILLER")
 

@@ -34,8 +34,16 @@
   and a deterministic simulated payer that prices a submitted claim and records
   the decision. The plan's worked example comes out exactly: 150.00 charged,
   110.00 allowed, 40.00 contractual adjustment, 80.00 insurance, 30.00 patient
+- **Rejection and correction** — the payer's eligibility check can refuse a claim
+  outright, on the member not being covered on the date of service. A refused
+  claim is not adjudicated: nothing is priced, and the payer's reason is on the
+  claim. Correcting it — editing the claim, or fixing the coverage it points at —
+  and resubmitting sends it back for a fresh answer. This is the one payer rule
+  validation deliberately does not pre-empt, because eligibility is the payer's
+  determination rather than a question about the claim itself
 - **Claim screens** — a claim list with a one-screen way to start a claim, and a
-  claim page with Validate, Mark ready and Submit plus the payer's answer
+  claim page with Validate, Mark ready and Submit plus the payer's answer, the
+  payer's reason when it refused the claim, and a Resubmit
 - **Onboarding gates** — forced password change and required profile block
   API access until completed
 - **Admin user management** — create, delete, verify/unverify, change role,

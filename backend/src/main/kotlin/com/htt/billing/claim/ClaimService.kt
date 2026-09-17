@@ -2,6 +2,7 @@ package com.htt.billing.claim
 
 import com.htt.billing.adjudication.AdjudicationRepository
 import com.htt.billing.adjudication.AdjudicationService
+import com.htt.billing.adjudication.PayerSimulator
 import com.htt.billing.claim.ClaimRepository.Claim
 import com.htt.billing.claim.ClaimRepository.ClaimSummary
 import com.htt.billing.claim.ClaimRepository.LineInput
@@ -24,9 +25,10 @@ import org.springframework.transaction.support.TransactionTemplate
  * Claims: creating and editing the draft, validating it, and the transitions the
  * state machine allows.
  *
- * Status is never taken from a request. Each action here performs one named move
- * — and submission performs three, because the simulated payer accepts and
- * prices immediately where a real one would answer later.
+ * Status is never taken from a request. Each action here performs the named moves
+ * the domain allows for it — and submission performs several, because the
+ * simulated payer accepts, prices and answers immediately where a real one would
+ * reply later. Submitting is also how a rejected claim goes back out.
  */
 @Service
 class ClaimService(
@@ -113,7 +115,15 @@ class ClaimService(
             ) ?: throw NotFoundException("Claim not found")
             claims.replaceDiagnoses(claimId, cleanDiagnoses(body.diagnoses))
             claims.replaceLines(claimId, parseLines(body.lines))
-            updated = claim
+            // Editing a rejected claim is the correction itself — the move the
+            // state machine calls REJECTED to CORRECTED. Without it a rejection
+            // would be a dead end, since nothing else may touch a rejected claim.
+            updated = if (claim.status == ClaimStatus.REJECTED) {
+                claims.updateStatus(claimId, ClaimStatus.CORRECTED, submittedAt = null)
+                    ?: throw NotFoundException("Claim not found")
+            } else {
+                claim
+            }
         }
         return detailOf(checkNotNull(updated))
     }
@@ -136,33 +146,81 @@ class ClaimService(
     }
 
     /**
-     * Submits a ready claim and takes the payer's answer. The claim has to be
-     * READY first, because DRAFT to SUBMITTED is not a move the state machine
-     * has — validating and submitting are separate steps on purpose.
+     * Submits the claim and takes the payer's answer.
+     *
+     * Two ways in: a READY claim goes out for the first time, and a rejected or
+     * corrected one goes back out, which the matrix gates on CLAIM_RESUBMIT rather
+     * than CLAIM_SUBMIT. The claim has to be READY first, because DRAFT to
+     * SUBMITTED is not a move the state machine has — validating and submitting
+     * are separate steps on purpose.
+     *
+     * The payer answers one of two ways. It accepts the claim and prices it, or it
+     * rejects it without pricing anything: a rejection is about eligibility, not
+     * about what the services are worth, so no adjudication is written and the
+     * lines keep the figures they had, which is none.
      */
     fun submit(userId: Int, claimId: Int): Detail {
         val claim = requireVisible(userId, claimId)
-        authorization.require(userId, Permissions.CLAIM_SUBMIT, claim.organizationId)
+        val resubmission =
+            claim.status == ClaimStatus.REJECTED || claim.status == ClaimStatus.CORRECTED
+        authorization.require(
+            userId,
+            if (resubmission) Permissions.CLAIM_RESUBMIT else Permissions.CLAIM_SUBMIT,
+            claim.organizationId,
+        )
         requireNoIssues(claim)
-        ClaimStatus.requireMove(claim.status, ClaimStatus.SUBMITTED)
 
         var result: Claim? = null
         transactions.executeWithoutResult {
-            claims.updateStatus(claimId, ClaimStatus.SUBMITTED, Instant.now())
+            // A rejected claim is corrected on its way back out, so the moves the
+            // state machine names are taken in order.
+            if (claim.status == ClaimStatus.REJECTED) {
+                ClaimStatus.requireMove(ClaimStatus.REJECTED, ClaimStatus.CORRECTED)
+                claims.updateStatus(claimId, ClaimStatus.CORRECTED, submittedAt = null)
+                    ?: throw NotFoundException("Claim not found")
+            }
+            val from = if (claim.status == ClaimStatus.REJECTED) {
+                ClaimStatus.CORRECTED
+            } else {
+                claim.status
+            }
+            val outgoing =
+                if (resubmission) ClaimStatus.RESUBMITTED else ClaimStatus.SUBMITTED
+            ClaimStatus.requireMove(from, outgoing)
+            claims.updateStatus(claimId, outgoing, Instant.now())
                 ?: throw NotFoundException("Claim not found")
 
-            // The payer takes the claim, then prices it. Two moves rather than one
-            // jump, so both are checked against the state machine.
-            ClaimStatus.requireMove(ClaimStatus.SUBMITTED, ClaimStatus.ACCEPTED)
-            val accepted = claims.updateStatus(claimId, ClaimStatus.ACCEPTED, submittedAt = null)
-                ?: throw NotFoundException("Claim not found")
-
-            val outcome = adjudication.adjudicate(accepted, claims.findLines(claimId))
-            ClaimStatus.requireMove(ClaimStatus.ACCEPTED, outcome)
-            result = claims.updateStatus(claimId, outcome, submittedAt = null)
-                ?: throw NotFoundException("Claim not found")
+            val rejection = eligibilityRejection(claim)
+            result = if (rejection == null) {
+                ClaimStatus.requireMove(outgoing, ClaimStatus.ACCEPTED)
+                val accepted = claims.updateStatus(claimId, ClaimStatus.ACCEPTED, submittedAt = null)
+                    ?: throw NotFoundException("Claim not found")
+                val outcome = adjudication.adjudicate(accepted, claims.findLines(claimId))
+                ClaimStatus.requireMove(ClaimStatus.ACCEPTED, outcome)
+                claims.updateStatus(claimId, outcome, submittedAt = null)
+                    ?: throw NotFoundException("Claim not found")
+            } else {
+                ClaimStatus.requireMove(outgoing, ClaimStatus.REJECTED)
+                claims.updateStatus(
+                    id = claimId,
+                    status = ClaimStatus.REJECTED,
+                    submittedAt = null,
+                    rejectionCode = rejection.code,
+                    rejectionMessage = rejection.message,
+                ) ?: throw NotFoundException("Claim not found")
+            }
         }
         return detailOf(checkNotNull(result))
+    }
+
+    /** The payer's eligibility check, which validation deliberately does not pre-empt. */
+    private fun eligibilityRejection(claim: Claim): PayerSimulator.Rejection? {
+        val coverage = facts.coverageFor(claim.coverageId)
+        return PayerSimulator.rejectionFor(
+            coveredFrom = coverage?.effectiveDate,
+            coveredTo = coverage?.terminationDate,
+            serviceDate = claim.serviceDate,
+        )
     }
 
     private fun issuesFor(claim: Claim): List<Issue> = ClaimValidator.validate(

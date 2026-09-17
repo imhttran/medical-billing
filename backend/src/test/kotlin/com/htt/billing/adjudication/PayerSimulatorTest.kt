@@ -3,16 +3,67 @@ package com.htt.billing.adjudication
 import com.htt.billing.adjudication.PayerSimulator.LineInput
 import com.htt.billing.adjudication.PayerSimulator.Rate
 import java.math.BigDecimal
+import java.time.LocalDate
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * The simulated payer's arithmetic. The first case is the plan's own worked
- * example, which Milestone 1's acceptance criteria assert.
+ * The simulated payer on its own: the rejection rule, then the arithmetic. The
+ * first pricing case is the plan's own worked example, which Milestone 1's
+ * acceptance criteria assert.
  */
 class PayerSimulatorTest {
+
+    @Test
+    fun aMemberCoveredOnTheServiceDateIsNotRejected() {
+        val serviceDate = LocalDate.parse("2026-03-02")
+
+        assertNull(PayerSimulator.rejectionFor(LocalDate.parse("2024-01-01"), null, serviceDate))
+        assertNull(PayerSimulator.rejectionFor(null, null, serviceDate))
+        assertNull(PayerSimulator.rejectionFor(null, LocalDate.parse("2026-03-03"), serviceDate))
+    }
+
+    @Test
+    fun bothCoverageDatesAreInclusive() {
+        val serviceDate = LocalDate.parse("2026-03-02")
+
+        assertNull(PayerSimulator.rejectionFor(serviceDate, serviceDate, serviceDate))
+    }
+
+    @Test
+    fun aServiceAfterTheCoverageEndedIsRejected() {
+        val rejection = PayerSimulator.rejectionFor(
+            LocalDate.parse("2024-01-01"),
+            LocalDate.parse("2025-12-31"),
+            LocalDate.parse("2026-03-02"),
+        )
+
+        assertEquals(PayerSimulator.REJECTION_MEMBER_NOT_ELIGIBLE, rejection?.code)
+        // The reason names the date it turned on, so a biller does not have to
+        // open the coverage to find out which end is wrong.
+        assertTrue(rejection!!.message.contains("2026-03-02")) { rejection.message }
+        assertTrue(rejection.message.contains("2025-12-31")) { rejection.message }
+    }
+
+    @Test
+    fun aServiceBeforeTheCoverageBeganIsRejected() {
+        val rejection = PayerSimulator.rejectionFor(
+            LocalDate.parse("2026-04-01"),
+            null,
+            LocalDate.parse("2026-03-02"),
+        )
+
+        assertEquals(PayerSimulator.REJECTION_MEMBER_NOT_ELIGIBLE, rejection?.code)
+    }
+
+    @Test
+    fun aMissingServiceDateIsNotThePayersObjection() {
+        // Validation refuses a claim without a service date; the payer never sees it.
+        assertNull(PayerSimulator.rejectionFor(LocalDate.parse("2024-01-01"), null, null))
+    }
 
     @Test
     fun thePlanWorkedExamplePricesExactly() {

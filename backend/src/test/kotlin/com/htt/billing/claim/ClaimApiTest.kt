@@ -201,6 +201,91 @@ class ClaimApiTest : BillingApiTest() {
     }
 
     @Test
+    fun aMemberNotCoveredOnTheServiceDateIsRejectedRatherThanAdjudicated() {
+        // The coverage ended before the service date, and validation is content:
+        // the claim is complete and the coverage flag is on. Eligibility on the
+        // date of service is the payer's call, not a rule the practice applies.
+        val fix = fixture(coverageTerminationDate = "2025-12-31")
+        val claimId = createClaim(fix.billingToken, fix.data)
+
+        val validated = env.doJson("POST", "/api/claims/$claimId/validate", fix.billingToken, null)
+        assertStatus(200, validated)
+        assertTrue(validated.body.path("valid").asBoolean()) { validated.text }
+
+        assertStatus(200, env.doJson("POST", "/api/claims/$claimId/ready", fix.billingToken, null))
+        val submitted = env.doJson("POST", "/api/claims/$claimId/submit", fix.billingToken, null)
+        assertStatus(200, submitted)
+
+        assertEquals("REJECTED", submitted.body.path("claim").path("status").asText())
+        assertEquals(
+            "MEMBER_NOT_ELIGIBLE",
+            submitted.body.path("claim").path("rejectionCode").asText(),
+        )
+        assertTrue(
+            submitted.body.path("claim").path("rejectionMessage").asText().contains("2025-12-31"),
+        ) { submitted.text }
+
+        // Not adjudicated: the payer refused it, so nothing was priced and there is
+        // no record of a decision about money.
+        assertTrue(submitted.body.path("adjudication").isNull) { submitted.text }
+        val line = submitted.body.path("lines").get(0)
+        assertEquals("PENDING", line.path("status").asText())
+        assertTrue(line.path("allowedAmount").isNull) { submitted.text }
+    }
+
+    @Test
+    fun aRejectedClaimIsCorrectedAndGoesBackOut() {
+        val fix = fixture(coverageTerminationDate = "2025-12-31")
+        val claimId = createClaim(fix.billingToken, fix.data)
+        assertStatus(200, env.doJson("POST", "/api/claims/$claimId/ready", fix.billingToken, null))
+        assertStatus(200, env.doJson("POST", "/api/claims/$claimId/submit", fix.billingToken, null))
+
+        // Editing a rejected claim is the correction: REJECTED to CORRECTED.
+        val edited = env.doJson(
+            "PUT",
+            "/api/claims/$claimId",
+            fix.billingToken,
+            claimBody(fix.data, serviceDate = "2025-06-02"),
+        )
+        assertStatus(200, edited)
+        assertEquals("CORRECTED", edited.body.path("claim").path("status").asText())
+
+        // Back out, and this time the member was covered.
+        val resubmitted = env.doJson("POST", "/api/claims/$claimId/submit", fix.billingToken, null)
+        assertStatus(200, resubmitted)
+        assertEquals("ADJUDICATED", resubmitted.body.path("claim").path("status").asText())
+        assertEquals(2, resubmitted.body.path("claim").path("submissionVersion").asInt())
+
+        // The payer's earlier reason is gone, because the claim is no longer rejected.
+        assertTrue(resubmitted.body.path("claim").path("rejectionCode").isNull) {
+            resubmitted.text
+        }
+        assertEquals(110.0, resubmitted.body.path("adjudication").path("totalAllowed").asDouble())
+    }
+
+    @Test
+    fun aResubmissionNeedsTheResubmitPermissionNotTheSubmitOne() {
+        val fix = fixture(coverageTerminationDate = "2025-12-31")
+        val claimId = createClaim(fix.billingToken, fix.data)
+        assertStatus(200, env.doJson("POST", "/api/claims/$claimId/ready", fix.billingToken, null))
+        assertStatus(200, env.doJson("POST", "/api/claims/$claimId/submit", fix.billingToken, null))
+
+        // PROVIDER holds CLAIM_CREATE and CLAIM_EDIT but neither CLAIM_SUBMIT nor
+        // CLAIM_RESUBMIT, so the claim's state does not widen what it may do.
+        val provider = signIn(RoleCodes.PROVIDER, practiceA.id)
+        assertStatus(403, env.doJson("POST", "/api/claims/$claimId/submit", provider.token, null))
+
+        // A practice admin holds CLAIM_RESUBMIT. Nothing about the coverage has
+        // changed, so the payer refuses it again — with a fresh answer, which is
+        // what makes a resubmission worth asking for.
+        val admin = signIn(RoleCodes.PRACTICE_ADMIN, practiceA.id)
+        val resubmitted = env.doJson("POST", "/api/claims/$claimId/submit", admin.token, null)
+        assertStatus(200, resubmitted)
+        assertEquals("REJECTED", resubmitted.body.path("claim").path("status").asText())
+        assertEquals(2, resubmitted.body.path("claim").path("submissionVersion").asInt())
+    }
+
+    @Test
     fun aReadOnlyUserCanReadButNotSubmit() {
         val fix = fixture()
         val claimId = createClaim(fix.billingToken, fix.data)
@@ -216,10 +301,13 @@ class ClaimApiTest : BillingApiTest() {
     /** A patient, a provider and a primary coverage, plus tokens for two roles. */
     private data class Fixture(val data: Practice, val billingToken: String, val adminToken: String)
 
-    private fun fixture(organizationId: Int = practiceA.id): Fixture {
+    private fun fixture(
+        organizationId: Int = practiceA.id,
+        coverageTerminationDate: String? = null,
+    ): Fixture {
         val admin = signIn(RoleCodes.PRACTICE_ADMIN, organizationId)
         return Fixture(
-            data = seedPracticeData(admin.token, organizationId),
+            data = seedPracticeData(admin.token, organizationId, coverageTerminationDate),
             billingToken = signIn(RoleCodes.BILLING_MANAGER, organizationId).token,
             adminToken = admin.token,
         )
@@ -227,7 +315,11 @@ class ClaimApiTest : BillingApiTest() {
 
     private data class Practice(val patientId: Int, val providerId: Int, val coverageId: Int)
 
-    private fun seedPracticeData(token: String, organizationId: Int): Practice {
+    private fun seedPracticeData(
+        token: String,
+        organizationId: Int,
+        coverageTerminationDate: String?,
+    ): Practice {
         val patient = env.doJson(
             "POST",
             "/api/patients",
@@ -262,6 +354,7 @@ class ClaimApiTest : BillingApiTest() {
                 "subscriberName" to "Jane Smith",
                 "relationshipToSubscriber" to "SELF",
                 "effectiveDate" to "2024-01-01",
+                "terminationDate" to coverageTerminationDate,
                 "priority" to 1,
             ),
         )

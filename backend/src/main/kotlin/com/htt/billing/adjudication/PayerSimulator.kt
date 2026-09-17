@@ -2,6 +2,7 @@ package com.htt.billing.adjudication
 
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.LocalDate
 
 /**
  * The deterministic simulated payer.
@@ -10,7 +11,7 @@ import java.math.RoundingMode
  * database and the same claim always prices the same way. Money is BigDecimal
  * throughout and every figure is rounded to cents on the way out.
  *
- * Three rules, and no attempt to model a real contract:
+ * Three pricing rules, and no attempt to model a real contract:
  *
  * - a procedure the payer has no rate for is not covered;
  * - otherwise the payer allows the lower of its rate and the charge, and the
@@ -20,11 +21,20 @@ import java.math.RoundingMode
  *
  * A copay rather than coinsurance, because the plan's own worked example is not
  * a percentage: 20% of 110.00 would be 22.00, not the 30.00 it states.
+ *
+ * Before any of that there is [rejectionFor], which is not a pricing rule: the
+ * payer can refuse the claim outright, and a refused claim is never priced.
  */
 object PayerSimulator {
 
     const val LINE_PAID = "PAID"
     const val LINE_DENIED = "DENIED"
+
+    /** The member was not the payer's to cover on the date of service. */
+    const val REJECTION_MEMBER_NOT_ELIGIBLE = "MEMBER_NOT_ELIGIBLE"
+
+    /** Why the payer would not process the claim at all. */
+    data class Rejection(val code: String, val message: String)
 
     data class Rate(val allowedAmount: BigDecimal, val patientCopay: BigDecimal)
 
@@ -59,6 +69,46 @@ object PayerSimulator {
 
     fun price(lines: List<LineInput>, rates: Map<String, Rate>): Result =
         Result(lines.map { priceLine(it, rates[it.procedureCode]) })
+
+    /**
+     * The payer's eligibility check, and the only rejection rule there is.
+     *
+     * The plan's other rejection examples cannot reach a payer here. A missing
+     * member ID is refused at the boundary — `coverages.member_id` is NOT NULL and
+     * the coverage API rejects a blank one — and a missing diagnosis, an unknown
+     * code or a bad charge is what `ClaimValidator` reports before a claim is even
+     * submitted. Those are questions a practice can answer about its own claim, so
+     * it answers them itself instead of spending a round trip on the payer.
+     *
+     * Whether the member was covered is a different kind of question: it is the
+     * payer's determination about the member, and a practice's copy of the
+     * coverage dates is not that. So it is deliberately not validated — a claim
+     * that is complete and internally consistent still goes out, and the payer
+     * says no. The upgrade path, when the simulator needs to disagree with the
+     * practice's copy, is a payer-side member eligibility record of its own.
+     *
+     * Both dates are inclusive, as coverage dates are: a service on the last day
+     * of a coverage is covered. A null date means open-ended. A missing service
+     * date is not this check's business; validation owns that.
+     */
+    fun rejectionFor(coveredFrom: LocalDate?, coveredTo: LocalDate?, serviceDate: LocalDate?): Rejection? {
+        if (serviceDate == null) {
+            return null
+        }
+        if (coveredFrom != null && serviceDate < coveredFrom) {
+            return Rejection(
+                REJECTION_MEMBER_NOT_ELIGIBLE,
+                "The member was not eligible on $serviceDate: coverage began $coveredFrom",
+            )
+        }
+        if (coveredTo != null && serviceDate > coveredTo) {
+            return Rejection(
+                REJECTION_MEMBER_NOT_ELIGIBLE,
+                "The member was not eligible on $serviceDate: coverage ended $coveredTo",
+            )
+        }
+        return null
+    }
 
     private fun priceLine(line: LineInput, rate: Rate?): LineResult {
         val zero = cents(BigDecimal.ZERO)

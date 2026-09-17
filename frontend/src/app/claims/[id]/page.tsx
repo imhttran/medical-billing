@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type FormEvent,
+  type MouseEvent,
+} from "react";
 import { useParams } from "next/navigation";
 import { API_BASE, renewSessionFrom, submitJson } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -36,11 +42,19 @@ type ClaimDetail = {
     status: string;
     serviceDate: string | null;
     patientId: number;
+    providerId: number;
+    coverageId: number;
+    submissionVersion: number;
+    rejectionCode: string | null;
+    rejectionMessage: string | null;
+    rejectedAt: string | null;
   };
   diagnoses: { diagnosisCode: string; sequence: number }[];
   lines: Line[];
   adjudication: Adjudication | null;
 };
+
+type Coverage = { id: number; memberId: string; active: boolean };
 
 type Issue = { code: string; message: string };
 
@@ -53,6 +67,7 @@ export default function ClaimDetailPage() {
   const { me, withToken } = useSession();
 
   const [detail, setDetail] = useState<ClaimDetail | null>(null);
+  const [coverages, setCoverages] = useState<Coverage[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [failed, setFailed] = useState(false);
   const [error, setError] = useState("");
@@ -60,6 +75,7 @@ export default function ClaimDetailPage() {
 
   const load = useCallback(
     async (authToken: string) => {
+      let loaded: ClaimDetail;
       try {
         const response = await fetch(`${API_BASE}/api/claims/${claimId}`, {
           headers: { Authorization: `Bearer ${authToken}` },
@@ -67,10 +83,26 @@ export default function ClaimDetailPage() {
         renewSessionFrom(response);
         const data = await response.json();
         if (!response.ok) throw new Error(data.message);
-        setDetail(data as ClaimDetail);
+        loaded = data as ClaimDetail;
+        setDetail(loaded);
         setFailed(false);
       } catch {
         setFailed(true);
+        return;
+      }
+      // The patient's coverages, so a claim can be corrected onto the right one.
+      // Without the list the edit form keeps the coverage the claim already has.
+      try {
+        const listed = await fetch(
+          `${API_BASE}/api/patients/${loaded.claim.patientId}/coverages`,
+          { headers: { Authorization: `Bearer ${authToken}` } },
+        );
+        if (listed.ok) {
+          const body = await listed.json();
+          setCoverages((body.coverages ?? []) as Coverage[]);
+        }
+      } catch {
+        setCoverages([]);
       }
     },
     [claimId],
@@ -83,7 +115,8 @@ export default function ClaimDetailPage() {
 
   /**
    * Validate, Mark ready and Submit are the same call shape: the transition
-   * either happens or the response carries the reasons it did not.
+   * either happens or the response carries the reasons it did not. Submitting a
+   * rejected or corrected claim is a resubmission on the same route.
    */
   const act = (action: "validate" | "ready" | "submit") => {
     setError("");
@@ -111,10 +144,58 @@ export default function ClaimDetailPage() {
         );
         return;
       }
-      setDetail(body as unknown as ClaimDetail);
+      const answer = body as unknown as ClaimDetail;
+      setDetail(answer);
       setNotice(
-        action === "ready" ? "Claim marked ready." : "Claim submitted.",
+        answer.claim.status === "REJECTED"
+          ? "The payer rejected this claim."
+          : action === "ready"
+            ? "Claim marked ready."
+            : "Claim submitted.",
       );
+    });
+  };
+
+  /**
+   * Correcting a claim is a PUT of the whole claim: the form only carries the two
+   * fields a rejection is usually about — the service date and which coverage the
+   * claim is billed to — and everything else goes back as it came, because a PUT
+   * replaces all of it. Editing a rejected claim is also the move the state
+   * machine calls CORRECTED.
+   */
+  const correct = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!detail) return;
+    const data = new FormData(event.currentTarget);
+    setError("");
+    setNotice("");
+    setIssues([]);
+    withToken(async (authToken) => {
+      const { ok, data: body } = await submitJson(
+        authToken,
+        `/api/claims/${claimId}`,
+        "PUT",
+        {
+          patientId: detail.claim.patientId,
+          providerId: detail.claim.providerId,
+          coverageId: Number(data.get("coverageId") ?? detail.claim.coverageId),
+          serviceDate: data.get("serviceDate"),
+          diagnoses: detail.diagnoses.map((row) => row.diagnosisCode),
+          lines: detail.lines.map((line) => ({
+            procedureCode: line.procedureCode,
+            quantity: line.quantity,
+            chargeAmount: String(line.chargeAmount),
+          })),
+        },
+      );
+      if (!ok) {
+        const refused = body.issues as Issue[] | undefined;
+        if (refused?.length) setIssues(refused);
+        else setError(body.message ?? "The claim could not be saved.");
+        return;
+      }
+      setDetail(body as unknown as ClaimDetail);
+      setNotice("Claim saved. It can go back to the payer now.");
     });
   };
 
@@ -126,6 +207,10 @@ export default function ClaimDetailPage() {
 
   const status = detail?.claim.status;
   const editable = status === "DRAFT" || status === "READY";
+  // A rejected claim goes back out once whatever the rejection named is fixed,
+  // which is usually the service date or the coverage it was billed to.
+  const resubmittable = status === "REJECTED" || status === "CORRECTED";
+  const correctable = editable || resubmittable;
 
   return (
     <div className="dashboard-container wide">
@@ -167,6 +252,16 @@ export default function ClaimDetailPage() {
 
           {detail ? (
             <>
+              {detail.claim.rejectionMessage ? (
+                <div>
+                  <h2>Rejected by the payer</h2>
+                  <p>
+                    <code>{detail.claim.rejectionCode}</code> —{" "}
+                    {detail.claim.rejectionMessage}
+                  </p>
+                </div>
+              ) : null}
+
               {editable ? (
                 <div className="form-footer">
                   <div>
@@ -195,6 +290,58 @@ export default function ClaimDetailPage() {
                     </button>
                   </div>
                 </div>
+              ) : null}
+
+              {resubmittable ? (
+                <div className="form-footer">
+                  <div>
+                    <button
+                      type="button"
+                      className="login-button"
+                      onClick={() => act("submit")}
+                    >
+                      Resubmit
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {correctable ? (
+                <details>
+                  <summary>Edit this claim</summary>
+                  <form onSubmit={correct}>
+                    <div className="input-group">
+                      <label htmlFor="serviceDate">Service date</label>
+                      <input
+                        id="serviceDate"
+                        name="serviceDate"
+                        type="date"
+                        defaultValue={detail.claim.serviceDate ?? ""}
+                        required
+                      />
+                    </div>
+                    {coverages.length ? (
+                      <div className="input-group">
+                        <label htmlFor="coverageId">Primary insurance</label>
+                        <select
+                          id="coverageId"
+                          name="coverageId"
+                          defaultValue={String(detail.claim.coverageId)}
+                        >
+                          {coverages.map((coverage) => (
+                            <option key={coverage.id} value={coverage.id}>
+                              {coverage.memberId}
+                              {coverage.active ? "" : " (retired)"}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
+                    <button type="submit" className="login-button">
+                      Save claim
+                    </button>
+                  </form>
+                </details>
               ) : null}
 
               <h2>Diagnoses</h2>
@@ -295,8 +442,11 @@ export default function ClaimDetailPage() {
                 </div>
               ) : (
                 <p>
-                  Not adjudicated yet. Mark the claim ready, then submit it —
-                  the simulated payer answers immediately.
+                  {status === "REJECTED"
+                    ? "The payer refused this claim and priced nothing. Fix what the rejection names, then resubmit it."
+                    : status === "CORRECTED"
+                      ? "The claim has been corrected. Resubmit it for a fresh answer."
+                      : "Not adjudicated yet. Mark the claim ready, then submit it — the simulated payer answers immediately."}
                 </p>
               )}
             </>
