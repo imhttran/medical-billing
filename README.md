@@ -100,6 +100,12 @@ The counts are deliberately not written down here — they went stale every time
 slice added tests. See **[docs/DATABASE.md](docs/DATABASE.md)** for the test
 database.
 
+Committing runs the same checks through `.githooks/pre-commit`, which builds and
+tests the backend, typechecks the frontend and runs the prettier check. Run
+`git config core.hooksPath .githooks` once after cloning to turn it on, since
+nothing activates a hook on checkout. Without that the checks run only when you
+ask for them.
+
 ## Roles
 
 Every account's identity is the billing roles it holds, and those are the only
