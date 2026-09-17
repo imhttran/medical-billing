@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Logo } from "@/components/Logo";
 
 // Every signed-in page offers the same destinations, and hand-writing that list
 // per page is how they drifted apart — from some pages you couldn't reach the
@@ -18,8 +19,15 @@ const DESTINATIONS = [
 ];
 
 /**
- * The title and optional subtitle render on the left, the navigation sits beside
- * them as a <nav> landmark, and children (e.g. a logout link) sit on the right.
+ * The brand mark leads the title, the optional subtitle sits under it, the
+ * navigation sits beside them as a <nav> landmark, and children (e.g. a logout
+ * link) sit on the right.
+ *
+ * The mark sits inside the <h1>, on the title's own line box. Centered against
+ * the title and subtitle together it floated between the two, and it has to
+ * ride the heading rather than the block to sit on the title. It's aria-hidden
+ * so the heading's accessible name stays just the page, since a mark announced
+ * on every page is noise.
  *
  * `current` is the section the page belongs to, so the link for the page you are
  * already on is marked with aria-current rather than reading as somewhere to go.
@@ -44,8 +52,13 @@ export function PageHeader({
 }) {
   return (
     <header className="page-header">
-      <div>
-        <h1>{title}</h1>
+      <div className="page-header-title">
+        <h1>
+          <span aria-hidden="true">
+            <Logo size={28} />
+          </span>
+          {title}
+        </h1>
         {subtitle ? <p>{subtitle}</p> : null}
       </div>
       <nav className="page-nav">
