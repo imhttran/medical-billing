@@ -1,30 +1,38 @@
 :root {
   color-scheme: light;
 
-  /* UT Austin navy scale, anchored on the reference image's deep navy #001020.
-     Only the steps the semantic tokens below actually reach for. */
-  --navy-900: #001020;
-  --navy-800: #061729;
-  --navy-700: #0b2030;
-  --navy-600: #12304a;
-  --navy-500: #1b4260;
-  --navy-350: #456d8c;
-  --navy-200: #9fb8c9;
-  --navy-50: #eef3f6;
+  /* Electric blue scale, anchored on the reference's #1B4DFF. Only the steps
+     the semantic tokens below actually reach for. */
+  --blue-900: #001666;
+  --blue-700: #0027b3;
+  --blue-600: #1b4dff;
+  --blue-500: #2c5aff;
+  --blue-400: #3d68ff;
+  --blue-300: #97aaed;
+  --blue-100: #e8eaf3;
 
-  /* UT Austin burnt-orange scale, primary is the official #BF5700. Same rule. */
-  --orange-700: #9e4700;
-  --orange-600: #b04a0a;
-  --orange-500: #bf5700;
-  --orange-400: #d06a1f;
-  --orange-300: #e08a4f;
+  /* Slate scale. The reference builds every background out of these and so do
+     we: slate-50 page, white card, slate-100 fill. */
+  --slate-950: #020617;
+  --slate-900: #0f172a;
+  --slate-800: #1e293b;
+  --slate-700: #334155;
+  --slate-600: #475569;
+  --slate-400: #94a3b8;
+  --slate-200: #e2e8f0;
+  --slate-100: #f1f5f9;
+  --slate-50: #f8fafc;
 
   /* Type — four steps, named by the job they do. Fixed sizes, deliberately:
      an app that reads rows of numbers all day wants type that doesn't grow
-     with the viewport. */
+     with the viewport. Two faces, as the reference: Onest carries body and
+     data, Plus Jakarta Sans carries titles. */
   --font-body:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
-    sans-serif;
+    var(--font-onest), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-display:
+    var(--font-jakarta), var(--font-onest), -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --text-xs: 0.75rem; /* table headers, footer, small controls */
   --text-sm: 0.875rem; /* table cells, meta lines, section labels */
   --text-base: 1rem; /* body, form fields */
@@ -39,82 +47,104 @@
   --space-5: 1.5rem;
   --space-6: 2rem;
 
-  /* Radius — two steps. Controls are flat-ish, panels are round. */
+  /* Radius — two steps, the reference's own measurements. Controls sit at 8px
+     and panels at 12px, which is the pair it uses more than any other. */
   --radius: 8px;
-  --radius-lg: 16px;
+  --radius-lg: 12px;
 
   /* Motion — interactive state changes only, never on page load. */
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --dur-fast: 150ms;
 
   /* Semantic tokens */
-  --bg-color: #fafaf7; /* warm off-white, reference image top */
+  --bg-color: var(--slate-50);
   --surface-color: #ffffff;
-  --raised-color: #f4f1ec;
-  --text-color: var(--navy-700);
+  --raised-color: var(--slate-100);
+  --text-color: var(--slate-900);
   /* Ink at two strengths. Both clear WCAG AA on every surface they appear on:
-     #456d8c is 5.26:1 on --bg-color and 5.50:1 on --surface-color. */
-  --text-muted: var(--navy-350);
-  --placeholder-color: var(--navy-350);
-  --border-color: #e3e0da;
-  /* Fill and ink are separate roles: the official orange stays the fill, and
-     orange text uses the darker step so it clears AA on light surfaces too. */
-  --primary-color: var(--orange-500);
-  --primary-hover: var(--orange-700);
-  --primary-ink: var(--orange-600);
+     #475569 is 7.58:1 on --surface-color and 6.92:1 on --raised-color. */
+  --text-muted: var(--slate-600);
+  /* Off-scale on purpose: the slate scale's 500 step is only 4.34:1 on
+     --raised-color, and placeholders sit on that fill. #5f6f85 clears it at
+     4.68:1. */
+  --placeholder-color: #5f6f85;
+  --border-color: var(--slate-200);
+  /* Fill and ink are separate roles, as the reference treats them. Blue text
+     uses the same step as the fill here because #1b4dff already clears AA on
+     every light surface, at 5.91:1 on --surface-color. */
+  --primary-color: var(--blue-600);
+  --primary-hover: var(--blue-700);
+  --primary-ink: var(--blue-600);
+  --primary-ink-hover: var(--blue-700);
   --on-primary: #ffffff;
-  --danger-color: #b3261e;
-  --danger-hover: #9c1f18;
-  --focus-ring: rgba(191, 87, 0, 0.25);
+  /* The reference's CTA glow. It goes on the one primary action per screen,
+     never on the small controls inside a table. */
+  --primary-glow:
+    0 10px 15px -3px oklch(0.524 0.265 265 / 0.25),
+    0 4px 6px -4px oklch(0.524 0.265 265 / 0.25);
+  --danger-color: #dc2626;
+  --danger-hover: #b91c1c;
+  /* Red text needs its own step in both directions. #dc2626 as text is 4.41:1
+     on --raised-color, and #c81e1e is 5.24:1 without reading as a fill. */
+  --danger-ink: #c81e1e;
+  --danger-ink-hover: #b91c1c;
+  --focus-ring: rgba(27, 77, 255, 0.25);
+  /* The reference's card weight, a hairline lift rather than a drop shadow. */
   --card-shadow:
-    0 1px 2px rgba(6, 23, 41, 0.06), 0 8px 24px -8px rgba(6, 23, 41, 0.18);
+    0 1px 3px oklch(0 0 0 / 0.1), 0 1px 2px -1px oklch(0 0 0 / 0.1);
 
-  /* Reference image background: warm off-white fading to deep navy */
-  --photo: url("/oaks.jpg");
+  /* Auth shell: the reference's primary-50 into slate-50 page wash. No photo
+     anywhere, app screens stay a flat surface to work on. */
   --bg-gradient: linear-gradient(
     180deg,
-    rgba(250, 250, 247, 0.9) 0%,
-    rgba(238, 243, 246, 0.84) 35%,
-    rgba(173, 196, 212, 0.78) 60%,
-    rgba(27, 66, 96, 0.85) 100%
+    var(--blue-100) 0%,
+    var(--slate-50) 60%,
+    var(--slate-50) 100%
   );
 
   /* Brand mark — HTT Tiers, duet colorway */
-  --logo-canopy: var(--orange-500);
-  --logo-base: var(--navy-900);
+  --logo-canopy: var(--blue-600);
+  --logo-base: var(--slate-900);
 }
 
-/* Dark variant — same navy/orange brand, navy surfaces instead of white. */
+/* Dark variant — the reference's slate-950 feature sections, same blue. */
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --bg-color: var(--navy-800);
-    --surface-color: var(--navy-700);
-    --raised-color: var(--navy-600);
-    --text-color: var(--navy-50);
-    --text-muted: var(--navy-200);
-    --placeholder-color: var(--navy-200);
-    --border-color: var(--navy-500);
-    --primary-color: var(--orange-500);
-    --primary-hover: var(--orange-400);
-    /* Orange text on navy needs the lighter step: #bf5700 is only 3.94:1 here. */
-    --primary-ink: var(--orange-300);
+    --bg-color: var(--slate-950);
+    --surface-color: var(--slate-900);
+    --raised-color: var(--slate-800);
+    --text-color: var(--slate-50);
+    --text-muted: var(--slate-400);
+    --placeholder-color: var(--slate-400);
+    --border-color: var(--slate-700);
+    --primary-color: var(--blue-600);
+    --primary-hover: var(--blue-500);
+    /* Blue text on slate needs the lighter step: #1b4dff is only 2.9:1 here. */
+    --primary-ink: var(--blue-300);
+    --primary-ink-hover: #b9c6f5;
     --on-primary: #ffffff;
-    --danger-color: #ff6b5e;
-    --danger-hover: #ff8a7a;
-    --focus-ring: rgba(191, 87, 0, 0.4);
-    --card-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+    --primary-glow:
+      0 10px 15px -3px oklch(0.524 0.265 265 / 0.4),
+      0 4px 6px -4px oklch(0.524 0.265 265 / 0.4);
+    /* The fill stays the fill and the text takes the light step. */
+    --danger-color: #dc2626;
+    --danger-hover: #b91c1c;
+    --danger-ink: #f87171;
+    --danger-ink-hover: #fca5a5;
+    --focus-ring: rgba(61, 104, 255, 0.45);
+    /* On dark, layered depth shadows are invisible. One white ring instead. */
+    --card-shadow: 0 0 0 1px oklch(1 0 0 / 0.08);
     --bg-gradient: linear-gradient(
       180deg,
-      rgba(15, 40, 60, 0.88) 0%,
-      rgba(12, 32, 52, 0.9) 45%,
-      rgba(6, 20, 36, 0.92) 100%
+      var(--slate-900) 0%,
+      var(--slate-950) 60%,
+      var(--slate-950) 100%
     );
 
-    /* Brand mark on navy surfaces: keep the orange, lighten the base */
-    --logo-canopy: var(--orange-500);
-    --logo-base: #eef3f6;
+    /* Brand mark on dark surfaces: keep the blue, lighten the base */
+    --logo-canopy: var(--blue-400);
+    --logo-base: var(--slate-50);
   }
 }
 
@@ -137,13 +167,15 @@ body {
   font-family: var(--font-body);
   background-color: var(--bg-color);
   color: var(--text-color);
+  /* The reference's body rhythm, 16px on a 24px line. */
+  line-height: 1.5;
   min-height: 100vh;
 }
 
 /* Login & Signup Styles */
 
-/* The auth shell. The photo lives here and nowhere else, so the app screens are
-   a flat surface to work on. Centering lives here too, now that <body> is a
+/* The auth shell. The page wash lives here and nowhere else, so the app screens
+   are a flat surface to work on. Centering lives here too, now that <body> is a
    plain block — and min-height with flex centering, rather than a fixed
    full-bleed box, keeps a tall form (2FA, sign-up) from clipping at the top. */
 .login-container {
@@ -154,11 +186,7 @@ body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background-image: var(--bg-gradient), var(--photo);
-  background-repeat: no-repeat, no-repeat;
-  background-attachment: fixed, fixed;
-  background-position: center, center;
-  background-size: cover, cover;
+  background-image: var(--bg-gradient);
 }
 
 .login-form {
@@ -173,8 +201,11 @@ body {
 }
 
 .login-form h1 {
+  font-family: var(--font-display);
   font-size: var(--text-display);
-  font-weight: 700;
+  font-weight: 800;
+  /* Titles tighten as they grow. 30px wants about this much. */
+  letter-spacing: -0.02em;
   margin-bottom: var(--space-2);
 }
 
@@ -287,6 +318,13 @@ body {
     transform var(--dur-fast) var(--ease-out);
 }
 
+/* The auth card is the front door, so its one action carries the reference's
+   CTA glow. Everywhere else the primary button stays flat, a glow on a form
+   submit sitting inside a table is noise. */
+.login-container .login-button {
+  box-shadow: var(--primary-glow);
+}
+
 .login-button:hover {
   background-color: var(--primary-hover);
 }
@@ -334,8 +372,10 @@ body {
 }
 
 .page-header h1 {
+  font-family: var(--font-display);
   font-size: var(--text-title);
   font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
 .page-header p {
@@ -373,7 +413,7 @@ body {
 }
 
 .logout-link {
-  color: var(--danger-color);
+  color: var(--danger-ink);
   font-size: var(--text-sm);
   font-weight: 500;
   text-decoration: none;
@@ -381,7 +421,7 @@ body {
 }
 
 .logout-link:hover {
-  color: var(--danger-hover);
+  color: var(--danger-ink-hover);
   text-decoration: underline;
 }
 
@@ -430,10 +470,11 @@ body {
   text-align: center;
 }
 
-/* Headings inside a card label the section under them. Small, tracked, muted:
-   a marker rather than a second title competing with the page header. */
+/* Headings inside a card label the section under them. The reference's eyebrow:
+   small, tracked, muted. A marker rather than a second title competing with the
+   page header. */
 .dashboard-card h2 {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -468,7 +509,7 @@ body {
 }
 
 .add-user-toggle:hover {
-  color: var(--primary-hover);
+  color: var(--primary-ink-hover);
 }
 
 .add-user-form {
@@ -587,7 +628,7 @@ body {
 }
 
 .link-button:hover {
-  color: var(--primary-hover);
+  color: var(--primary-ink-hover);
 }
 
 .actions-trigger {
@@ -637,12 +678,12 @@ body {
 /* Delete stays red inside the menu, just as a link instead of a filled pill. */
 .actions-menu-list .link-button.button-danger {
   background: none;
-  color: var(--danger-color);
+  color: var(--danger-ink);
 }
 
 .actions-menu-list .link-button.button-danger:hover {
   background: none;
-  color: var(--danger-hover);
+  color: var(--danger-ink-hover);
 }
 
 .user-pager {
@@ -673,8 +714,8 @@ body {
   cursor: not-allowed;
 }
 
-/* The fill goes orange on hover, so the label has to flip with it: navy on
-   #bf5700 is only 3.62:1. */
+/* The fill goes solid blue on hover, so the label has to flip with it: the
+   slate body ink on #1b4dff is only 2.8:1. */
 .user-pager button:not(:disabled):hover {
   background-color: var(--primary-color);
   color: var(--on-primary);

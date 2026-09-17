@@ -96,8 +96,9 @@
   so the API can't be used to probe registered emails
 - **Server-side proxy** — the browser only talks to Next.js; `/api/*` is
   forwarded to the Spring Boot API, so it's never exposed directly
-- **Theming** — UT Austin navy/orange, light and dark variants that follow the
-  system setting
+- **Theming** — electric blue on slate, light and dark variants that follow the
+  system setting. Two faces, Onest for body and data, Plus Jakarta Sans for
+  titles
 
 ## Permission matrix
 

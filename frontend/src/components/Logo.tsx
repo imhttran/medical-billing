@@ -1,7 +1,7 @@
 // Brand mark: HTT Tiers — the tree built from the initials, duet colorway.
-// The H crown and T tier are always the brand burnt orange; the ground tier
-// and trunk use .logo-base, which globals.css flips to a light navy in dark
-// mode so it never disappears on navy surfaces.
+// The H crown and T tier are always the brand blue; the ground tier
+// and trunk use .logo-base, which globals.css flips to a light slate in dark
+// mode so it never disappears on the dark surface.
 export function Logo({ size = 40 }: { size?: number }) {
   return (
     <svg
