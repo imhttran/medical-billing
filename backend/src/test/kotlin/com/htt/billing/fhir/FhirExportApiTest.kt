@@ -284,8 +284,4 @@ class FhirExportApiTest : BillingApiTest() {
             .single()
     }
 
-    private fun payerId(): Int = jdbc
-        .sql("SELECT id FROM payers WHERE payer_code = 'SYN001'")
-        .query(Int::class.javaObjectType)
-        .single()
 }

@@ -225,8 +225,4 @@ class AuditApiTest : BillingApiTest() {
         return created.body.path("claim").path("id").asInt()
     }
 
-    private fun payerId(): Int = jdbc
-        .sql("SELECT id FROM payers WHERE payer_code = 'SYN001'")
-        .query(Int::class.javaObjectType)
-        .single()
 }

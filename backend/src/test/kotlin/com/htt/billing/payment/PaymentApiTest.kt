@@ -279,11 +279,6 @@ class PaymentApiTest : BillingApiTest() {
     /** BILLER holds CLAIM_CREATE, CLAIM_SUBMIT and PAYMENT_RECORD. */
     private val collector by lazy { signIn(RoleCodes.BILLER, practiceA.id) }
 
-    private fun payerId(): Int = jdbc
-        .sql("SELECT id FROM payers WHERE payer_code = 'SYN001'")
-        .query(Int::class.javaObjectType)
-        .single()
-
     private companion object {
         /** After the demo coverage begins, so the payer does not reject it. */
         const val SERVICE_DATE = "2026-03-02"

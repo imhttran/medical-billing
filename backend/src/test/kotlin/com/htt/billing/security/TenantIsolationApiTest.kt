@@ -215,10 +215,7 @@ class TenantIsolationApiTest : BillingApiTest() {
     )
 
     private fun coverageBody(): Map<String, Any?> = mapOf(
-        "payerId" to jdbc
-            .sql("SELECT id FROM payers WHERE payer_code = 'SYN001'")
-            .query(Int::class.javaObjectType)
-            .single(),
+        "payerId" to payerId(),
         "memberId" to "T1S0LAT10N",
         "groupNumber" to "GRP-77",
         "subscriberName" to "Jane Smith",

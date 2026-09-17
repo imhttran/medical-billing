@@ -344,11 +344,6 @@ class WorkQueueApiTest : BillingApiTest() {
             .single()
     }
 
-    private fun payerId(): Int = jdbc
-        .sql("SELECT id FROM payers WHERE payer_code = 'SYN001'")
-        .query(Int::class.javaObjectType)
-        .single()
-
     private companion object {
         /** Before the coverage begins, so the payer refuses the claim. */
         const val BEFORE_COVERAGE_BEGINS = "2026-01-05"

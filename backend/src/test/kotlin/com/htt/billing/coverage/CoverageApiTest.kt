@@ -141,8 +141,4 @@ class CoverageApiTest : BillingApiTest() {
     )
 
     /** The seeded payer, looked up directly so the test does not depend on ordering. */
-    private fun payerId(): Int = jdbc
-        .sql("SELECT id FROM payers WHERE payer_code = 'SYN001'")
-        .query(Int::class.javaObjectType)
-        .single()
 }

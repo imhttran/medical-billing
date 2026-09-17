@@ -59,7 +59,6 @@ dependencies {
     // are deliberately absent — see FhirResources for what is checked instead — and
     // so are its optional logging and HTML bindings, which would otherwise fight
     // Spring Boot's.
-    implementation("ca.uhn.hapi.fhir:hapi-fhir-base:8.12.1")
     implementation("ca.uhn.hapi.fhir:hapi-fhir-structures-r4:8.12.1")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")

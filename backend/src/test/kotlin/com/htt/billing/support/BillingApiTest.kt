@@ -93,6 +93,15 @@ abstract class BillingApiTest : IntegrationTest() {
         .single()
 
     /**
+     * The synthetic payer the seeded fee schedule belongs to — the only one with
+     * rates, so a coverage written by hand has to name it.
+     */
+    protected fun payerId(): Int = jdbc
+        .sql("SELECT id FROM payers WHERE payer_code = 'SYN001'")
+        .query(Int::class.javaObjectType)
+        .single()
+
+    /**
      * A signed-in user holding [roleCode] at [organizationId] (null for a
      * platform-scoped role).
      */

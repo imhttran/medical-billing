@@ -42,10 +42,7 @@ export function confirmedPasswordOrAlert(
 export async function submitForm<T extends ApiResult = ApiResult>(
   path: string,
   body: unknown,
-  {
-    busyLabel,
-    onSuccess,
-  }: { busyLabel: string; onSuccess: (result: T) => void | Promise<void> },
+  { onSuccess }: { onSuccess: (result: T) => void | Promise<void> },
   setBusy: (busy: boolean) => void,
 ): Promise<void> {
   setBusy(true);
@@ -80,7 +77,6 @@ export async function submitEmailForm(
     path,
     { email },
     {
-      busyLabel: "Sending...",
       onSuccess: (result) => {
         alert(result.message);
         window.location.href = "/";

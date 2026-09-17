@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { type FormEvent } from "react";
 import { confirmedPasswordOrAlert, submitAuthedForm } from "@/lib/api";
 import { PageTitle } from "@/components/PageTitle";
 

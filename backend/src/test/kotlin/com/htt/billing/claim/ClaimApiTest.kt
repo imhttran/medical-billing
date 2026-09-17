@@ -416,11 +416,6 @@ class ClaimApiTest : BillingApiTest() {
         ),
     )
 
-    private fun payerId(): Int = jdbc
-        .sql("SELECT id FROM payers WHERE payer_code = 'SYN001'")
-        .query(Int::class.javaObjectType)
-        .single()
-
     private companion object {
         /** Deliberately absent from the seeded fee schedule. */
         const val UNPRICED_CODE = "99999"
