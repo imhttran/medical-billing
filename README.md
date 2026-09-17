@@ -149,9 +149,10 @@ trip, are in **[docs/SPRING_MIGRATION.md](docs/SPRING_MIGRATION.md)**.
 
 ## API
 
-40 endpoints under `/api/*` — see the controllers in
+51 endpoints under `/api/*` — see the controllers in
 `backend/src/main/kotlin/com/htt/billing/identity/`, `.../practice/`,
-`.../patient/`, `.../coverage/`, `.../coding/`, `.../claim/`:
+`.../patient/`, `.../coverage/`, `.../coding/`, `.../claim/`, `.../payment/`,
+`.../workflow/`, `.../fhir/`:
 
 - **Public auth** (8): signup, verify, resend-verification, forgot-password,
   reset-password, login, login/verify (2FA code), login/resend (2FA code)
@@ -160,14 +161,21 @@ trip, are in **[docs/SPRING_MIGRATION.md](docs/SPRING_MIGRATION.md)**.
 - **Staff/admin** (7): list users, create user, delete, verify/unverify,
   change role, resend verification, reset password
 - **Organizations** (1): list, derived from the caller's own grants
-- **Patients** (4): list/search, create, read, update
+- **Patients** (5): list/search, create, read, update, and the patient's balance
+  across their claims
 - **Coverage** (3): list and create under a patient, update by id
 - **Payers** (1): list, for the coverage picker
 - **Providers** (3): list, create, read
 - **Terminology** (2): search ICD-10-CM diagnoses and CPT/HCPCS procedures
-- **Claims** (7): list, read, create, edit, validate, mark ready, submit. No
-  endpoint sets a status — the two transitions are named actions, and everything
-  else goes through create and edit while the claim is still a draft
+- **Claims** (9): list, read, create, edit, validate, mark ready, submit, the
+  claim's payments, and recording a patient payment. No endpoint sets a status —
+  the transitions are named actions, and everything else goes through create and
+  edit while the claim is still editable
+- **Work queue** (4): list, read, assign, resolve
+- **FHIR** (3): import a Bundle of Patients, Practitioners and Coverages; export a
+  claim as a FHIR Claim; export what the payer made of it as an
+  ExplanationOfBenefit. This is the integration boundary rather than the UI's API,
+  so it answers with `application/fhir+json`
 - **Demo reset** (1): rebuild the synthetic dataset. Development and demo only —
   the route is not registered anywhere else
 
@@ -181,11 +189,11 @@ their own grants, and a named practice is checked against those grants either
 way. An account that can write in several has to say which, because the choice
 is genuinely ambiguous.
 
-The UI has four screens against this API: `/patients` and `/patients/{id}` for
-patients and their coverage, and `/claims` and `/claims/{id}` for the claim
-workflow. `/claims/{id}` is where the golden path is walkable — create, validate,
-mark ready, submit, and read the payer's answer — and it is what Milestone 1's
-acceptance criteria describe.
+The UI has five screens against this API: `/patients` and `/patients/{id}` for
+patients and their coverage, `/claims` and `/claims/{id}` for the claim workflow,
+and `/work-queue` for the follow-up the payers' answers create. `/claims/{id}` is
+where the golden path is walkable — create, validate, mark ready, submit, and read
+the payer's answer — and it is what Milestone 1's acceptance criteria describe.
 
 `GET /api/me` returns the platform role, not billing permissions, so the UI
 cannot hide what the user may not do. It shows the action and displays the

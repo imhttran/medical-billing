@@ -42,4 +42,20 @@ class PayerRepository(private val jdbc: JdbcClient) {
         .query(Payer::class.java)
         .optional()
         .orElse(null)
+
+    /**
+     * A payer by its name, for an imported coverage that names its payor by display
+     * rather than by code. Case-insensitive: a display name is prose, not a key.
+     */
+    fun findActiveByName(name: String): Payer? = jdbc
+        .sql(
+            """
+            SELECT id, name, payer_code AS "payerCode", active
+            FROM payers WHERE lower(name) = lower(:name) AND active
+            """,
+        )
+        .param("name", name.trim())
+        .query(Payer::class.java)
+        .optional()
+        .orElse(null)
 }

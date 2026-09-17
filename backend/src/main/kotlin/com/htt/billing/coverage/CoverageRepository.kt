@@ -43,6 +43,25 @@ class CoverageRepository(private val jdbc: JdbcClient) {
         .list()
 
     /**
+     * The member's coverage with one payer, which is what makes a re-imported
+     * Coverage an update rather than a second record for the same person.
+     */
+    fun findByMember(patientId: Int, payerId: Int, memberId: String): Coverage? = jdbc
+        .sql(
+            """
+            $SELECT WHERE patient_id = :patientId AND payer_id = :payerId
+              AND member_id = :memberId
+            ORDER BY id ASC LIMIT 1
+            """,
+        )
+        .param("patientId", patientId)
+        .param("payerId", payerId)
+        .param("memberId", memberId)
+        .query(MAPPER)
+        .optional()
+        .orElse(null)
+
+    /**
      * @return rows deleted. Explicit rather than relying on the cascade from
      *         patients, because the demo reset reports what it removed.
      */

@@ -13,6 +13,7 @@ class ProviderRepository(private val jdbc: JdbcClient) {
         val id: Int,
         val organizationId: Int,
         val userId: Int?,
+        val externalId: String?,
         val firstName: String,
         val lastName: String,
         val npi: String?,
@@ -23,6 +24,26 @@ class ProviderRepository(private val jdbc: JdbcClient) {
     fun findById(id: Int): Provider? = jdbc
         .sql("$SELECT WHERE id = :id")
         .param("id", id)
+        .query(MAPPER)
+        .optional()
+        .orElse(null)
+
+    /**
+     * The provider a source system means, by the identifier it used for them, or by
+     * NPI when the export carried no identifier of its own.
+     */
+    fun findByExternalId(organizationId: Int, externalId: String): Provider? = jdbc
+        .sql("$SELECT WHERE organization_id = :organizationId AND external_id = :externalId")
+        .param("organizationId", organizationId)
+        .param("externalId", externalId)
+        .query(MAPPER)
+        .optional()
+        .orElse(null)
+
+    fun findByNpi(organizationId: Int, npi: String): Provider? = jdbc
+        .sql("$SELECT WHERE organization_id = :organizationId AND npi = :npi")
+        .param("organizationId", organizationId)
+        .param("npi", npi)
         .query(MAPPER)
         .optional()
         .orElse(null)
@@ -61,12 +82,65 @@ class ProviderRepository(private val jdbc: JdbcClient) {
         .query(MAPPER)
         .single()
 
+    fun insert(
+        organizationId: Int,
+        firstName: String,
+        lastName: String,
+        npi: String?,
+        taxonomyCode: String?,
+        externalId: String? = null,
+    ): Provider = jdbc
+        .sql(
+            """
+            INSERT INTO providers
+                (organization_id, external_id, first_name, last_name, npi, taxonomy_code)
+            VALUES (:organizationId, :externalId, :firstName, :lastName, :npi, :taxonomyCode)
+            RETURNING $COLUMNS
+            """,
+        )
+        .param("organizationId", organizationId)
+        .param("externalId", externalId, Types.VARCHAR)
+        .param("firstName", firstName)
+        .param("lastName", lastName)
+        .param("npi", npi, Types.VARCHAR)
+        .param("taxonomyCode", taxonomyCode, Types.VARCHAR)
+        .query(MAPPER)
+        .single()
+
+    /** @return the updated row, or null when there is no such provider. */
+    fun update(
+        id: Int,
+        firstName: String,
+        lastName: String,
+        npi: String?,
+        taxonomyCode: String?,
+        externalId: String?,
+    ): Provider? = jdbc
+        .sql(
+            """
+            UPDATE providers
+            SET external_id = :externalId, first_name = :firstName, last_name = :lastName,
+                npi = :npi, taxonomy_code = :taxonomyCode
+            WHERE id = :id
+            RETURNING $COLUMNS
+            """,
+        )
+        .param("id", id)
+        .param("externalId", externalId, Types.VARCHAR)
+        .param("firstName", firstName)
+        .param("lastName", lastName)
+        .param("npi", npi, Types.VARCHAR)
+        .param("taxonomyCode", taxonomyCode, Types.VARCHAR)
+        .query(MAPPER)
+        .optional()
+        .orElse(null)
+
     private companion object {
 
         const val COLUMNS = """
             id, organization_id AS "organizationId", user_id AS "userId",
-            first_name AS "firstName", last_name AS "lastName", npi,
-            taxonomy_code AS "taxonomyCode", active
+            external_id AS "externalId", first_name AS "firstName",
+            last_name AS "lastName", npi, taxonomy_code AS "taxonomyCode", active
         """
 
         const val SELECT = "SELECT $COLUMNS FROM providers"
@@ -76,6 +150,7 @@ class ProviderRepository(private val jdbc: JdbcClient) {
                 rs.getInt("id"),
                 rs.getInt("organizationId"),
                 (rs.getObject("userId") as? Number)?.toInt(),
+                rs.getString("externalId"),
                 rs.getString("firstName"),
                 rs.getString("lastName"),
                 rs.getString("npi"),

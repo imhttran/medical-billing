@@ -33,6 +33,8 @@ class ClaimRepository(private val jdbc: JdbcClient) {
         val status: ClaimStatus,
         val submissionVersion: Int,
         val submittedAt: Instant?,
+        /** When the claim was written down, which a FHIR export reports as `created`. */
+        val createdAt: Instant,
         /*
          * The payer's reason for rejecting the claim, and null on any claim it
          * did not reject. It describes the status, so it is replaced by the next
@@ -53,6 +55,8 @@ class ClaimRepository(private val jdbc: JdbcClient) {
         val claimId: Int,
         val lineNumber: Int,
         val procedureCode: String,
+        /** From the code set, so an export can say which system the code is in. */
+        val procedureCodeSystem: String?,
         val quantity: Int,
         val chargeAmount: BigDecimal,
         val allowedAmount: BigDecimal?,
@@ -249,7 +253,7 @@ class ClaimRepository(private val jdbc: JdbcClient) {
     }
 
     fun findLines(claimId: Int): List<Line> = jdbc
-        .sql("$SELECT_LINE WHERE claim_id = :claimId ORDER BY line_number ASC")
+        .sql("$SELECT_LINE WHERE claim_lines.claim_id = :claimId ORDER BY line_number ASC")
         .param("claimId", claimId)
         .query(LINE_MAPPER)
         .list()
@@ -299,7 +303,8 @@ class ClaimRepository(private val jdbc: JdbcClient) {
             service_date AS "serviceDate", status,
             submission_version AS "submissionVersion", submitted_at AS "submittedAt",
             rejection_code AS "rejectionCode",
-            rejection_message AS "rejectionMessage", rejected_at AS "rejectedAt"
+            rejection_message AS "rejectionMessage", rejected_at AS "rejectedAt",
+            created_at AS "createdAt"
         """
 
         // Unqualified on purpose: RETURNING cannot reference a table alias, so one
@@ -307,14 +312,22 @@ class ClaimRepository(private val jdbc: JdbcClient) {
         const val SELECT = "SELECT $COLUMNS FROM claims"
 
         const val LINE_COLUMNS = """
-            id, claim_id AS "claimId", line_number AS "lineNumber",
-            procedure_code AS "procedureCode", quantity,
+            claim_lines.id, claim_id AS "claimId", line_number AS "lineNumber",
+            procedure_code AS "procedureCode",
+            procedure_codes.code_system AS "procedureCodeSystem", quantity,
             charge_amount AS "chargeAmount", allowed_amount AS "allowedAmount",
             adjustment_amount AS "adjustmentAmount", payer_amount AS "payerAmount",
             patient_responsibility AS "patientResponsibility", status
         """
 
-        const val SELECT_LINE = "SELECT $LINE_COLUMNS FROM claim_lines"
+        /**
+         * Joined to the code set rather than repeating its system on every line: a
+         * FHIR export has to say which system a service code is in.
+         */
+        const val SELECT_LINE = """
+            SELECT $LINE_COLUMNS FROM claim_lines
+            LEFT JOIN procedure_codes ON procedure_codes.code = claim_lines.procedure_code
+        """
 
         val MAPPER = RowMapper { rs, _ ->
             Claim(
@@ -329,6 +342,7 @@ class ClaimRepository(private val jdbc: JdbcClient) {
                 ClaimStatus.valueOf(rs.getString("status")),
                 rs.getInt("submissionVersion"),
                 rs.getObject("submittedAt", OffsetDateTime::class.java)?.toInstant(),
+                rs.getObject("createdAt", OffsetDateTime::class.java).toInstant(),
                 rs.getString("rejectionCode"),
                 rs.getString("rejectionMessage"),
                 rs.getObject("rejectedAt", OffsetDateTime::class.java)?.toInstant(),
@@ -341,6 +355,7 @@ class ClaimRepository(private val jdbc: JdbcClient) {
                 rs.getInt("claimId"),
                 rs.getInt("lineNumber"),
                 rs.getString("procedureCode"),
+                rs.getString("procedureCodeSystem"),
                 rs.getInt("quantity"),
                 rs.getBigDecimal("chargeAmount"),
                 rs.getBigDecimal("allowedAmount"),

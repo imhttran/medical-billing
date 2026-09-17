@@ -37,6 +37,18 @@ class PatientRepository(private val jdbc: JdbcClient) {
         .optional()
         .orElse(null)
 
+    /**
+     * The patient a source system means, by the identifier it used for them. That
+     * is what makes a re-import an update rather than a second record.
+     */
+    fun findByExternalId(organizationId: Int, externalId: String): Patient? = jdbc
+        .sql("$SELECT WHERE organization_id = :organizationId AND external_id = :externalId")
+        .param("organizationId", organizationId)
+        .param("externalId", externalId)
+        .query(MAPPER)
+        .optional()
+        .orElse(null)
+
     fun countInOrganization(organizationId: Int): Int = jdbc
         .sql("SELECT count(*) FROM patients WHERE organization_id = :organizationId")
         .param("organizationId", organizationId)

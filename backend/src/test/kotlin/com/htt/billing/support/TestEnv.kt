@@ -36,7 +36,13 @@ class TestEnv(private val mvc: MockMvc, private val jdbc: JdbcClient) {
     val password: String = PASSWORD
 
     /** A response: the status, the session-renewal header, and the parsed body. */
-    data class Response(val status: Int, val renewedToken: String?, val body: JsonNode) {
+    data class Response(
+        val status: Int,
+        val renewedToken: String?,
+        /** The media type the server answered with, which FHIR clients care about. */
+        val contentType: String?,
+        val body: JsonNode,
+    ) {
 
         /** The body as text, for assertion messages. */
         val text: String get() = body.toString()
@@ -65,6 +71,7 @@ class TestEnv(private val mvc: MockMvc, private val jdbc: JdbcClient) {
             Response(
                 response.status,
                 response.getHeader(RENEWED_TOKEN_HEADER),
+                response.contentType,
                 parse(response.contentAsByteArray),
             )
         } catch (failed: Exception) {

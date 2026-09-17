@@ -63,6 +63,14 @@
   leaving the list. An item can be assigned (only to someone who can work that
   queue) and resolved; resubmitting the claim resolves its items by itself.
   Assignment and both kinds of resolution are audited
+- **FHIR R4 import and export** — a Bundle of Patients, Practitioners and
+  Coverages is imported and reconciled by the identifier the source system used,
+  so a re-import updates rather than duplicates; a claim exports as a FHIR Claim,
+  and the payer's answer as an ExplanationOfBenefit carrying the adjudication
+  categories and the remittance. HAPI FHIR parses and serialises; the mapping is
+  ours. Payers travel contained in the resource rather than as references to a
+  server we do not have, and the import is one transaction — a bundle with a
+  problem in it is refused whole, with every problem listed
 - **Onboarding gates** — forced password change and required profile block
   API access until completed
 - **Admin user management** — create, delete, verify/unverify, change role,
