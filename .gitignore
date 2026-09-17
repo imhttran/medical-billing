@@ -13,6 +13,12 @@ bin/
 # Service pid files (manage.sh)
 *.pid
 
+# JVM crash artefacts. A dying JVM writes both of these into its working
+# directory, which is the repo root for the Kotlin language server and backend/
+# for a Gradle daemon.
+hs_err_pid*.log
+replay_pid*.log
+
 # Env config: the two shipped templates are tracked, everything else is yours.
 # A root .env — and any other .env.* you add — stays personal and overrides
 # whatever the tracked files set.
