@@ -30,7 +30,7 @@ export default function ForgotPasswordPage() {
           />
         </div>
 
-        <button type="submit" className="login-button" disabled={busy}>
+        <button type="submit" className="primary-button" disabled={busy}>
           {busy ? "Sending..." : "Send Reset Link"}
         </button>
 

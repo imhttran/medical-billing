@@ -303,7 +303,11 @@ body {
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
-.login-button {
+/* The app's one primary button. It lives in this section because the auth card
+   is where it started, but every page's main action uses it, so it's sized as a
+   control that sits in a row rather than as the full-width auth submit. The
+   auth card puts that back with the rule below. */
+.primary-button {
   padding: var(--space-2) var(--space-4);
   background-color: var(--primary-color);
   color: var(--on-primary);
@@ -320,27 +324,27 @@ body {
 /* The auth card is the front door. Its one action is the full-width button the
    card is built around, and the only place the reference's CTA glow appears —
    a glow on a form submit sitting inside a table is noise. */
-.login-container .login-button {
+.login-container .primary-button {
   width: 100%;
   padding: var(--space-3);
   font-size: var(--text-base);
   box-shadow: var(--primary-glow);
 }
 
-.login-button:hover:not(:disabled) {
+.primary-button:hover:not(:disabled) {
   background-color: var(--primary-hover);
 }
 
 /* A claim's actions are gated on its status, so the one that isn't available
    yet has to read as unavailable rather than as a second live button. Faded
    blue would drop the label to about 2.1:1, so it goes flat instead. */
-.login-button:disabled {
+.primary-button:disabled {
   background-color: var(--raised-color);
   color: var(--text-muted);
   cursor: not-allowed;
 }
 
-.login-button:active:not(:disabled) {
+.primary-button:active:not(:disabled) {
   transform: scale(0.96);
 }
 

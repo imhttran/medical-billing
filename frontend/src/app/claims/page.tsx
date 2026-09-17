@@ -301,7 +301,7 @@ export default function ClaimsPage() {
                   required
                 />
               </div>
-              <button type="submit" className="login-button">
+              <button type="submit" className="primary-button">
                 Create Claim
               </button>
             </form>

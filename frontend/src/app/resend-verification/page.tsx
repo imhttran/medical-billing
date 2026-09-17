@@ -34,7 +34,7 @@ export default function ResendVerificationPage() {
           />
         </div>
 
-        <button type="submit" className="login-button" disabled={busy}>
+        <button type="submit" className="primary-button" disabled={busy}>
           {busy ? "Sending..." : "Resend Verification"}
         </button>
 

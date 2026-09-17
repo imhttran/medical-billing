@@ -238,7 +238,7 @@ export default function LoginPage() {
             />
           </div>
 
-          <button type="submit" className="login-button" disabled={busy}>
+          <button type="submit" className="primary-button" disabled={busy}>
             {busy ? "Signing in..." : "Sign In"}
           </button>
 
@@ -305,7 +305,7 @@ export default function LoginPage() {
             />
           </div>
 
-          <button type="submit" className="login-button" disabled={busy}>
+          <button type="submit" className="primary-button" disabled={busy}>
             {busy ? "Registering..." : "Register"}
           </button>
 

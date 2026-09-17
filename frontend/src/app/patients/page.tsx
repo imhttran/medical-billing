@@ -130,7 +130,7 @@ export default function PatientsPage() {
               placeholder="Search by name"
               defaultValue={search}
             />
-            <button type="submit" className="login-button">
+            <button type="submit" className="primary-button">
               Search
             </button>
             {search ? (
@@ -194,7 +194,7 @@ export default function PatientsPage() {
                 <label htmlFor="phone">Phone</label>
                 <input id="phone" name="phone" />
               </div>
-              <button type="submit" className="login-button">
+              <button type="submit" className="primary-button">
                 Add Patient
               </button>
             </form>

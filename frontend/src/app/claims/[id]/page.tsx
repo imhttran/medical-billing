@@ -345,7 +345,7 @@ export default function ClaimDetailPage() {
                     </button>
                     <button
                       type="button"
-                      className="login-button"
+                      className="primary-button"
                       onClick={() => act("ready")}
                       disabled={status === "READY"}
                     >
@@ -353,7 +353,7 @@ export default function ClaimDetailPage() {
                     </button>
                     <button
                       type="button"
-                      className="login-button"
+                      className="primary-button"
                       onClick={() => act("submit")}
                       disabled={status !== "READY"}
                     >
@@ -368,7 +368,7 @@ export default function ClaimDetailPage() {
                   <div className="action-row">
                     <button
                       type="button"
-                      className="login-button"
+                      className="primary-button"
                       onClick={() => act("submit")}
                     >
                       Resubmit
@@ -408,7 +408,7 @@ export default function ClaimDetailPage() {
                         </select>
                       </div>
                     ) : null}
-                    <button type="submit" className="login-button">
+                    <button type="submit" className="primary-button">
                       Save claim
                     </button>
                   </form>
@@ -617,7 +617,7 @@ export default function ClaimDetailPage() {
                             placeholder="Optional"
                           />
                         </div>
-                        <button type="submit" className="login-button">
+                        <button type="submit" className="primary-button">
                           Record payment
                         </button>
                       </form>

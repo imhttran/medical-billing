@@ -325,7 +325,7 @@ export default function DashboardPage() {
                     placeholder="Temporary password"
                     required
                   />
-                  <button type="submit" className="login-button">
+                  <button type="submit" className="primary-button">
                     Add User
                   </button>
                 </form>

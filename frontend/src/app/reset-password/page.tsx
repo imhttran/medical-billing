@@ -63,7 +63,7 @@ export default function ResetPasswordPage() {
           />
         </div>
 
-        <button type="submit" className="login-button" disabled={busy}>
+        <button type="submit" className="primary-button" disabled={busy}>
           {busy ? "Resetting..." : "Reset Password"}
         </button>
 

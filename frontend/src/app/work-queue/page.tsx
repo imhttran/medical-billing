@@ -188,7 +188,7 @@ export default function WorkQueuePage() {
                             )}{" "}
                             <button
                               type="button"
-                              className="login-button"
+                              className="primary-button"
                               onClick={() => act("resolve", item.id)}
                             >
                               Resolve

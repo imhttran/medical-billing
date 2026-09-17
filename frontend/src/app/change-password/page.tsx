@@ -62,7 +62,7 @@ export default function ChangePasswordPage() {
           />
         </div>
 
-        <button type="submit" className="login-button">
+        <button type="submit" className="primary-button">
           Change Password
         </button>
       </form>

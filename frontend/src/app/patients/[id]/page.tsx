@@ -318,7 +318,7 @@ export default function PatientDetailPage() {
                     defaultValue={patient.phone ?? ""}
                   />
                 </div>
-                <button type="submit" className="login-button">
+                <button type="submit" className="primary-button">
                   Save
                 </button>
               </form>
@@ -475,7 +475,7 @@ export default function PatientDetailPage() {
                       defaultValue="1"
                     />
                   </div>
-                  <button type="submit" className="login-button">
+                  <button type="submit" className="primary-button">
                     Add Coverage
                   </button>
                 </form>

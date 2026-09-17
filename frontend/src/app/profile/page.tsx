@@ -153,7 +153,7 @@ export default function ProfilePage() {
           />
         </div>
 
-        <button type="submit" className="login-button">
+        <button type="submit" className="primary-button">
           Save Profile
         </button>
       </form>
